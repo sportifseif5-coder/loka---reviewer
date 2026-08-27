@@ -3,6 +3,9 @@
 .gemini
 .opencode
 
+# Codegraph (local code navigation index)
+.codegraph/
+
 # IDE and Editors
 **/.idea/
 **/.vscode/
