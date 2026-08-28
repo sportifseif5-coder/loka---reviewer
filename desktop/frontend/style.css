@@ -1,0 +1,93 @@
+:root {
+  --bg: #0f1117;
+  --panel: #171a23;
+  --fg: #e6e8ee;
+  --muted: #9aa0ae;
+  --accent: #4f8cff;
+  --border: #262b38;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.version {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.workbench {
+  padding: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.picker {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.picker label {
+  color: var(--muted);
+}
+
+.picker input {
+  flex: 1;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+}
+
+.picker button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.summary {
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.findings {
+  display: grid;
+  gap: 8px;
+}
+
+.finding {
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}

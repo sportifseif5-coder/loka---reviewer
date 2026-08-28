@@ -4,6 +4,57 @@
 > Updated at the end of every session. History is authoritative; this file is
 > the summary.
 
+## Session 2 - 2026-08-28: Phase 0 foundations
+
+### State
+
+- Phase: **Phase 0 (Foundations), feature-complete**. All scope items landed:
+  module layout, CI, storage schema, config loader, Wails desktop stub.
+  Exit criteria (empty-review flow end to end, CI green with network
+  disabled) pass locally. CI not yet run on GitHub.
+- Branch: `master`. Remote: `origin`
+  (`https://github.com/sportifseif5-coder/loka---reviewer`).
+- Push requires stripping the injected credential helper:
+  `env -u GIT_CONFIG_COUNT -u GIT_CONFIG_KEY_0 -u GIT_CONFIG_VALUE_0 -u GIT_CONFIG_KEY_1 -u GIT_CONFIG_VALUE_1 git push`.
+
+### What was built
+
+- Core module (`go.mod`, Go 1.25, deps `gopkg.in/yaml.v3`,
+  `modernc.org/sqlite`): packages `internal/config`, `internal/model`,
+  `internal/store`, `internal/review`, `internal/version`,
+  `cmd/loka/main.go` (`review` / `version` subcommands).
+- Config loader: defaults, YAML parse with unknown-key warnings, layered
+  inheritance (`LoadForRepo`), and a **presence-aware merge** fixing the bug
+  where a partial file (e.g. `mode:` only) clobbered inherited scopes
+  (`Merge(overlay, present map[string]bool)`).
+- SQLite store: migrations v1 (reviews/findings), v2 (index tables), v3
+  (learnings); `SaveReview` / `GetReview` round trip.
+- Review engine: `Engine.Review`, Analyzer interface, empty-review flow with
+  degradation handling, golden-file harness (`-update` flag) over
+  `testdata/repos/empty`.
+- Quality gates: `Makefile` (`make ci` = fmt + vet + test + offline + build
+  + desktop), `.github/workflows/ci.yml` (core + desktop jobs),
+  `scripts/test-offline.sh` (real `unshare -n` network isolation).
+- Wails v2 desktop stub: `desktop/` with `desktop` build tag so core builds
+  stay webkit-free; static frontend in `desktop/frontend/dist` checked in
+  for `go:embed`; `App.Review` stub binding (uses `model.ErrEmptyRepoPath`).
+  Desktop build verified locally (5 MB binary) with webkit2gtk-4.1 dev deps.
+
+### Verified
+
+- `make ci` green locally: gofmt clean, vet clean, unit tests pass, offline
+  tests pass under real network isolation, core + desktop builds succeed.
+- Presence-merge fix verified: `TestLoadForRepoInheritance` passes (user
+  scope `review_tokens: 999` + repo `mode: agent` both survive).
+- CLI end to end: `go run ./cmd/loka review -repo internal/review/testdata/repos/empty -db /tmp/loka-test/loka.db -json` returns an empty review result and persists it.
+
+### Next session
+
+1. Push to GitHub and confirm CI (core + desktop) goes green there.
+2. Install **codegraph** now that source exists.
+3. Start **Phase 1**: VCS adapter, indexer, analyzers, rules, provider layer,
+   real engine wiring into the desktop `Review` binding.
+
 ## Session 1 - 2026-08-27: Design phase
 
 ### State

@@ -177,3 +177,7 @@
 *.lz
 *.lzma
 *.iso
+
+# Desktop frontend assets are embedded via go:embed and checked in on purpose
+!desktop/frontend/dist/
+!desktop/frontend/dist/**

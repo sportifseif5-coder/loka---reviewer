@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loka</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Loka</h1>
+      <span id="version" class="version"></span>
+    </header>
+    <main class="workbench">
+      <section class="picker">
+        <label for="repo">Repository</label>
+        <input id="repo" type="text" placeholder="/path/to/repo" />
+        <button id="run" type="button">Run review</button>
+      </section>
+      <section class="results">
+        <div id="summary" class="summary"></div>
+        <div id="findings" class="findings"></div>
+      </section>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>
