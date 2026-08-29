@@ -6,7 +6,8 @@ set -euo pipefail
 
 run_offline() {
     echo "running tests with networking disabled"
-    unshare -n go test ./... -count=1
+    # Never attempt a toolchain auto-download inside the isolated namespace.
+    GOTOOLCHAIN=local unshare -n go test ./... -count=1
 }
 
 # Try a user namespace with networking unshared first (no privileges needed
@@ -15,7 +16,7 @@ if unshare -n true 2>/dev/null; then
     run_offline
 elif sudo -n true 2>/dev/null && sudo unshare -n true 2>/dev/null; then
     echo "running tests with networking disabled (via sudo)"
-    sudo unshare -n go test ./... -count=1
+    sudo -E GOTOOLCHAIN=local unshare -n go test ./... -count=1
 else
     echo "warning: cannot disable networking here; tests are offline by design"
     go test ./... -count=1

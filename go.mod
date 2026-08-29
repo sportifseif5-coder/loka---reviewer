@@ -1,6 +1,6 @@
 module github.com/sportifseif5-coder/loka---reviewer
 
-go 1.25.6
+go 1.25.0
 
 require (
 	github.com/wailsapp/wails/v2 v2.10.2

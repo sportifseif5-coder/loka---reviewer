@@ -5,6 +5,9 @@ on:
     branches: [master]
   pull_request:
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   core:
     runs-on: ubuntu-latest
