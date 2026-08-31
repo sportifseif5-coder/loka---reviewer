@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/store"
@@ -142,6 +143,6 @@ type failAnalyzer struct{}
 
 func (failAnalyzer) Name() string { return "fail" }
 
-func (failAnalyzer) Analyze(context.Context, AnalysisUnit) ([]model.Finding, error) {
+func (failAnalyzer) Analyze(context.Context, analyzer.AnalysisUnit) ([]model.Finding, error) {
 	return nil, os.ErrClosed
 }

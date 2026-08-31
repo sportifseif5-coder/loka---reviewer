@@ -10,10 +10,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/review"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/rules"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/store"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/vcs"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/version"
 )
 
@@ -73,6 +76,16 @@ func runReview(args []string) {
 	defer s.Close()
 
 	eng := review.NewEngine(cfg, s)
+	eng.RegisterVCS(vcs.NewGit())
+	eng.RegisterAnalyzer(analyzer.SecretDetector{})
+	eng.RegisterAnalyzer(analyzer.GoVetBridge{})
+
+	rs, warnings := loadRules(*repoPath, cfg.Rules.Include)
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+	eng.RegisterRules(rs)
+
 	res, err := eng.Review(context.Background(), model.ReviewRequest{
 		RepoPath: *repoPath,
 		Mode:     string(cfg.Mode),
@@ -106,4 +119,47 @@ func defaultDBPath() string {
 		return filepath.Join(os.TempDir(), "loka", "loka.db")
 	}
 	return filepath.Join(dir, "loka", "loka.db")
+}
+
+// loadRules compiles the built-in defaults plus any rule files named in
+// rules.include. Include entries are resolved against the repository-local
+// .loka/ dir, the repository root, and the user config dir. Missing files
+// produce warnings, never errors.
+func loadRules(repoPath string, include []string) ([]*rules.Rule, []string) {
+	rs := rules.Defaults()
+	var warnings []string
+
+	candidates := func(rel string) []string {
+		var out []string
+		if repoPath != "" {
+			out = append(out, filepath.Join(repoPath, ".loka", rel))
+			out = append(out, filepath.Join(repoPath, rel))
+		}
+		if dir, err := os.UserConfigDir(); err == nil {
+			out = append(out, filepath.Join(dir, "loka", rel))
+		}
+		return out
+	}
+
+	for _, rel := range include {
+		loaded := false
+		for _, p := range candidates(rel) {
+			data, err := os.ReadFile(p)
+			if err != nil {
+				continue
+			}
+			parsed, err := rules.ParseAll(data, p)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("rules file %s: %v", p, err))
+				continue
+			}
+			rs = append(rs, parsed...)
+			loaded = true
+			break
+		}
+		if !loaded {
+			warnings = append(warnings, fmt.Sprintf("rules file %q not found, skipped", rel))
+		}
+	}
+	return rs, warnings
 }

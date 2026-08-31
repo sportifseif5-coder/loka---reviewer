@@ -1,7 +1,7 @@
 // Package review implements the core review engine: it orchestrates the
-// deterministic analyzer pipeline, rules, and (later) the LLM/agent layers,
-// and persists results. In Phase 0 the pipeline is intentionally empty; the
-// flow must produce a valid, persisted zero-finding review.
+// deterministic analyzer pipeline and the rules engine, merges and ranks the
+// baseline, and persists results (architecture sections 4 and 6). In offline
+// mode no network path is ever opened.
 package review
 
 import (
@@ -10,31 +10,24 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
+	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/rules"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/store"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/vcs"
 )
-
-// AnalysisUnit is the input handed to an analyzer (architecture section 6.1).
-type AnalysisUnit struct {
-	RepoPath string
-	Files    []string
-}
-
-// Analyzer is the deterministic analyzer interface. Implementations are
-// registered in the Engine; Phase 0 ships none.
-type Analyzer interface {
-	Name() string
-	Analyze(ctx context.Context, unit AnalysisUnit) ([]model.Finding, error)
-}
 
 // Engine runs review lifecycle end to end.
 type Engine struct {
 	cfg       *config.Config
 	store     *store.Store
-	analyzers []Analyzer
+	vcs       vcs.VCSAdapter
+	analyzers []analyzer.Analyzer
+	rules     []*rules.Rule
 }
 
 // NewEngine builds an engine from configuration and an optional store.
@@ -42,9 +35,19 @@ func NewEngine(cfg *config.Config, s *store.Store) *Engine {
 	return &Engine{cfg: cfg, store: s}
 }
 
+// RegisterVCS installs the read-only VCS adapter.
+func (e *Engine) RegisterVCS(v vcs.VCSAdapter) {
+	e.vcs = v
+}
+
 // RegisterAnalyzer adds a deterministic analyzer to the pipeline.
-func (e *Engine) RegisterAnalyzer(a Analyzer) {
+func (e *Engine) RegisterAnalyzer(a analyzer.Analyzer) {
 	e.analyzers = append(e.analyzers, a)
+}
+
+// RegisterRules adds rules to the evaluation set.
+func (e *Engine) RegisterRules(rs []*rules.Rule) {
+	e.rules = append(e.rules, rs...)
 }
 
 // Review runs one review against a repository and persists the result.
@@ -63,10 +66,13 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 		AnalyzersRun: []string{},
 	}
 
-	// Deterministic pipeline: analyzers run first; rules and LLM layers are
-	// added in later phases. The baseline is always produced.
+	// Working-tree diff is the deterministic review input.
+	changed := e.collectDiff(ctx, req.RepoPath, res)
+	unit := analyzer.AnalysisUnit{RepoPath: req.RepoPath, Changed: changed}
+
+	// Deterministic analyzers run first and always; the baseline must be
+	// produced even if the LLM/agent layer is unavailable (invariants I2/I3).
 	for _, a := range e.analyzers {
-		unit := AnalysisUnit{RepoPath: req.RepoPath}
 		findings, err := a.Analyze(ctx, unit)
 		if err != nil {
 			res.Degradations = append(res.Degradations,
@@ -77,6 +83,18 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 		res.Findings = append(res.Findings, findings...)
 	}
 
+	if len(e.rules) > 0 {
+		res.AnalyzersRun = append(res.AnalyzersRun, "rules")
+		res.Findings = append(res.Findings, rules.Evaluate(changed, e.rules)...)
+	}
+
+	res.Findings = dedupe(res.Findings)
+	rank(res.Findings)
+	for i := range res.Findings {
+		if res.Findings[i].ID == "" {
+			res.Findings[i].ID = newID()
+		}
+	}
 	res.FinishedAt = time.Now()
 
 	if e.store != nil {
@@ -87,8 +105,71 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 	return res, nil
 }
 
-// validateRepo checks that the target exists and is a directory. Git-aware
-// validation arrives with the VCS adapter in Phase 1.
+// collectDiff populates the changed-file slice from the VCS adapter,
+// degrading to a warning when the target is not a git work tree.
+func (e *Engine) collectDiff(ctx context.Context, repoPath string, res *model.ReviewResult) []vcs.ChangedFile {
+	if e.vcs == nil {
+		return nil
+	}
+	diff, err := e.vcs.WorkingDiff(ctx, repoPath)
+	if err != nil {
+		if err == vcs.ErrNotRepository {
+			res.Degradations = append(res.Degradations,
+				"repository has no git work tree; reviewing without a diff")
+		} else {
+			res.Degradations = append(res.Degradations,
+				fmt.Sprintf("reading working diff failed: %v", err))
+		}
+		return nil
+	}
+	return vcs.ParseChangedFiles(diff.Files)
+}
+
+// dedupe merges findings that share a location and rule identity. The
+// deterministic baseline is ground truth, so identical duplicates collapse
+// to the first occurrence.
+func dedupe(findings []model.Finding) []model.Finding {
+	seen := map[string]bool{}
+	out := make([]model.Finding, 0, len(findings))
+	for _, f := range findings {
+		key := f.Location.File + ":" + itoa(f.Location.LineStart) + ":" + f.RuleID
+		if f.RuleID == "" {
+			key += ":" + f.Category
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, f)
+	}
+	return out
+}
+
+var severityWeight = map[model.Severity]int{
+	model.SeverityInfo:     1,
+	model.SeverityWarning:  2,
+	model.SeverityError:    3,
+	model.SeverityCritical: 4,
+}
+
+// rank orders findings by severity, then confidence, then location.
+func rank(findings []model.Finding) {
+	sort.SliceStable(findings, func(i, j int) bool {
+		wi, wj := severityWeight[findings[i].Severity], severityWeight[findings[j].Severity]
+		if wi != wj {
+			return wi > wj
+		}
+		if findings[i].Confidence != findings[j].Confidence {
+			return findings[i].Confidence > findings[j].Confidence
+		}
+		if findings[i].Location.File != findings[j].Location.File {
+			return findings[i].Location.File < findings[j].Location.File
+		}
+		return findings[i].Location.LineStart < findings[j].Location.LineStart
+	})
+}
+
+// validateRepo checks that the target exists and is a directory.
 func validateRepo(path string) error {
 	if path == "" {
 		return model.ErrEmptyRepoPath
@@ -110,4 +191,11 @@ func newID() string {
 		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
+}
+
+func itoa(n int) string {
+	if n <= 0 {
+		return "0"
+	}
+	return fmt.Sprintf("%d", n)
 }

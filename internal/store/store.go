@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -121,6 +122,10 @@ CREATE TABLE learnings (
     created_at TEXT NOT NULL
 );
 `,
+	// v4: findings carry evidence (ADR-0006), stored as a JSON array.
+	`
+ALTER TABLE findings ADD COLUMN evidence TEXT NOT NULL DEFAULT '[]';
+`,
 }
 
 // migrate applies pending migrations in order, each inside a transaction.
@@ -182,13 +187,17 @@ VALUES (?, ?, ?, ?, ?, ?)`,
 	}
 
 	for _, f := range r.Findings {
+		evidence, err := json.Marshal(f.Evidence)
+		if err != nil {
+			return fmt.Errorf("marshal evidence: %w", err)
+		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO findings
-    (id, review_id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (id, review_id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			f.ID, r.ID, f.RuleID, f.Category, string(f.Severity), string(f.Source),
 			f.Location.File, nullableInt(f.Location.LineStart), nullableInt(f.Location.LineEnd),
-			f.Message, f.Reasoning, f.Confidence); err != nil {
+			f.Message, f.Reasoning, f.Confidence, string(evidence)); err != nil {
 			return fmt.Errorf("insert finding: %w", err)
 		}
 	}
@@ -217,7 +226,7 @@ FROM reviews WHERE id = ?`, id)
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence
+SELECT id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence
 FROM findings WHERE review_id = ? ORDER BY file_path, line_start`, id)
 	if err != nil {
 		return nil, err
@@ -227,8 +236,9 @@ FROM findings WHERE review_id = ? ORDER BY file_path, line_start`, id)
 		var f model.Finding
 		var sev, src string
 		var lineStart, lineEnd sql.NullInt64
+		var evidence string
 		if err := rows.Scan(&f.ID, &f.RuleID, &f.Category, &sev, &src, &f.Location.File,
-			&lineStart, &lineEnd, &f.Message, &f.Reasoning, &f.Confidence); err != nil {
+			&lineStart, &lineEnd, &f.Message, &f.Reasoning, &f.Confidence, &evidence); err != nil {
 			return nil, err
 		}
 		f.Severity = model.Severity(sev)
@@ -238,6 +248,11 @@ FROM findings WHERE review_id = ? ORDER BY file_path, line_start`, id)
 		}
 		if lineEnd.Valid {
 			f.Location.LineEnd = int(lineEnd.Int64)
+		}
+		if evidence != "" {
+			if err := json.Unmarshal([]byte(evidence), &f.Evidence); err != nil {
+				return nil, fmt.Errorf("unmarshal evidence: %w", err)
+			}
 		}
 		r.Findings = append(r.Findings, f)
 	}

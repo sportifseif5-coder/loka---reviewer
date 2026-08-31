@@ -1,23 +1,35 @@
 #!/usr/bin/env bash
-# Run the full test suite with networking disabled, when the host allows it.
-# Tests are designed to need no network and no keys; this script makes that
-# property explicit rather than assumed.
+# Run the full test suite with module networking disabled. Tests are designed
+# to need no network and no keys; this script makes that property explicit
+# rather than assumed. GOPROXY=off makes any module fetch fail, and, when the
+# host allows it, a network namespace also blocks sockets.
 set -euo pipefail
 
+export GOTOOLCHAIN=local
+export GOPROXY=off
+export GOSUMDB=off
+
 run_offline() {
-    echo "running tests with networking disabled"
-    # Never attempt a toolchain auto-download inside the isolated namespace.
-    GOTOOLCHAIN=local unshare -n go test ./... -count=1
+    echo "running tests with module network disabled"
+    go test ./... -count=1
 }
 
-# Try a user namespace with networking unshared first (no privileges needed
-# on most modern kernels), then sudo, then fall back to a plain run.
+run_netns() {
+    echo "running tests with networking disabled (network namespace)"
+    unshare -n go test ./... -count=1
+}
+
+run_netns_sudo() {
+    echo "running tests with networking disabled (network namespace via sudo)"
+    # sudo resets PATH; carry the runner's PATH and toolchain settings over.
+    sudo env "PATH=$PATH" GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off unshare -n go test ./... -count=1
+}
+
 if unshare -n true 2>/dev/null; then
-    run_offline
+    run_netns
 elif sudo -n true 2>/dev/null && sudo unshare -n true 2>/dev/null; then
-    echo "running tests with networking disabled (via sudo)"
-    sudo -E GOTOOLCHAIN=local unshare -n go test ./... -count=1
+    run_netns_sudo
 else
-    echo "warning: cannot disable networking here; tests are offline by design"
-    go test ./... -count=1
+    echo "warning: cannot disable networking here; module network stays disabled (GOPROXY=off)"
+    run_offline
 fi
