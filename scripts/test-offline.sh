@@ -21,8 +21,14 @@ run_netns() {
 
 run_netns_sudo() {
     echo "running tests with networking disabled (network namespace via sudo)"
-    # sudo resets PATH; carry the runner's PATH and toolchain settings over.
-    sudo env "PATH=$PATH" GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off unshare -n go test ./... -count=1
+    # sudo resets PATH and HOME; carry the runner's PATH, toolchain settings,
+    # and warm module cache over so the offline run reuses already-downloaded
+    # modules instead of fetching (GOPROXY=off makes a fetch fail loudly).
+    local gomodcache
+    gomodcache="$(go env GOMODCACHE)"
+    sudo env "PATH=$PATH" "HOME=$HOME" "GOMODCACHE=$gomodcache" \
+        GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off \
+        unshare -n go test ./... -count=1
 }
 
 if unshare -n true 2>/dev/null; then
