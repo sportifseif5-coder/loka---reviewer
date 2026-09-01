@@ -51,8 +51,18 @@
 1. Agent layer (`internal/agent`): Review Agent + Verification Agent on top of
    the provider router; richer context pack assembly with token budgeting.
 2. UI: findings list + inline diff in the Wails workbench.
-3. Codegraph install for this repo's navigation; archify skill (user to
-   provide source/content).
+
+### Tooling (2026-09-01)
+
+- **Codegraph installed** (`@colbymchenry/codegraph` v1.6.0 via npm -g to
+  /usr/local/bin). MCP server registered in `~/.config/opencode/opencode.json`
+  (`mcp.codegraph` -> `codegraph serve --mcp`, enabled). Index built for this
+  repo (`codegraph init`, `.codegraph/` gitignored). Telemetry off. Restart
+  opencode for the MCP server to load.
+- **Archify skill installed** at `~/.config/opencode/skills/archify/`
+  (cloned from `tt-a1i/archify`, copied the `archify/` skill dir; SKILL.md
+  frontmatter valid, renderer runs with bundled deps). Restart opencode for
+  the skill to load.
 
 ## Session 3 - 2026-08-31: Phase 1 deterministic core
 
