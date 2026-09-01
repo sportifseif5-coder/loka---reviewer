@@ -16,6 +16,7 @@ import (
 	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/provider"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/rules"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/store"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/vcs"
@@ -28,6 +29,7 @@ type Engine struct {
 	vcs       vcs.VCSAdapter
 	analyzers []analyzer.Analyzer
 	rules     []*rules.Rule
+	router    *provider.Router
 }
 
 // NewEngine builds an engine from configuration and an optional store.
@@ -48,6 +50,12 @@ func (e *Engine) RegisterAnalyzer(a analyzer.Analyzer) {
 // RegisterRules adds rules to the evaluation set.
 func (e *Engine) RegisterRules(rs []*rules.Rule) {
 	e.rules = append(e.rules, rs...)
+}
+
+// RegisterProviderRouter installs the LLM routing set. Without a router the
+// LLM stage is skipped and only the deterministic baseline is produced.
+func (e *Engine) RegisterProviderRouter(r *provider.Router) {
+	e.router = r
 }
 
 // Review runs one review against a repository and persists the result.
@@ -72,6 +80,7 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 
 	// Deterministic analyzers run first and always; the baseline must be
 	// produced even if the LLM/agent layer is unavailable (invariants I2/I3).
+	baseline := make([]model.Finding, 0, 16)
 	for _, a := range e.analyzers {
 		findings, err := a.Analyze(ctx, unit)
 		if err != nil {
@@ -80,12 +89,19 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 			continue
 		}
 		res.AnalyzersRun = append(res.AnalyzersRun, a.Name())
-		res.Findings = append(res.Findings, findings...)
+		baseline = append(baseline, findings...)
 	}
 
 	if len(e.rules) > 0 {
 		res.AnalyzersRun = append(res.AnalyzersRun, "rules")
-		res.Findings = append(res.Findings, rules.Evaluate(changed, e.rules)...)
+		baseline = append(baseline, rules.Evaluate(changed, e.rules)...)
+	}
+
+	// The LLM stage is additive: on any failure it degrades to a note and the
+	// deterministic baseline still ships (ADR-0003 routing policy, I2/I3).
+	res.Findings = baseline
+	if llm := e.llmStage(ctx, unit, baseline, res); len(llm) > 0 {
+		res.Findings = append(res.Findings, llm...)
 	}
 
 	res.Findings = dedupe(res.Findings)
@@ -103,6 +119,44 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 		}
 	}
 	return res, nil
+}
+
+// llmStage runs the optional provider-router stage over the changed files and
+// the deterministic baseline. In offline mode only local providers are
+// eligible; remote providers require the per-repository consent implied by a
+// non-offline mode (invariant I6). Every failure path degrades to a note and
+// returns no findings; the baseline is always delivered.
+func (e *Engine) llmStage(ctx context.Context, unit analyzer.AnalysisUnit, baseline []model.Finding, res *model.ReviewResult) []model.Finding {
+	if e.router == nil {
+		return nil
+	}
+
+	localOnly := e.cfg.Mode == config.ModeOffline
+	prompt := packContext(unit, baseline)
+	result, err := e.router.Complete(ctx, provider.Request{
+		System:      llmSystemPrompt,
+		Prompt:      prompt,
+		MaxTokens:   e.cfg.Budgets.ReviewTokens,
+		Temperature: 0.2,
+	}, localOnly)
+	if err != nil {
+		res.Degradations = append(res.Degradations,
+			fmt.Sprintf("LLM stage skipped: %v", err))
+		return nil
+	}
+
+	findings, dropped, err := parseLLMFindings(result.Content)
+	if err != nil {
+		res.Degradations = append(res.Degradations,
+			fmt.Sprintf("LLM stage skipped: %v", err))
+		return nil
+	}
+	if dropped > 0 {
+		res.Degradations = append(res.Degradations,
+			fmt.Sprintf("LLM stage dropped %d finding(s) missing location or message", dropped))
+	}
+	res.AnalyzersRun = append(res.AnalyzersRun, "llm:"+result.Model)
+	return findings
 }
 
 // collectDiff populates the changed-file slice from the VCS adapter,

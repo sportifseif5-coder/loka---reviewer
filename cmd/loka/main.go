@@ -13,6 +13,7 @@ import (
 	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/provider"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/review"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/rules"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/store"
@@ -85,6 +86,15 @@ func runReview(args []string) {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 	eng.RegisterRules(rs)
+
+	// Provider routing is additive: a misconfigured provider degrades to the
+	// deterministic baseline instead of aborting the review.
+	router, err := provider.Resolve(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v (LLM stage disabled)\n", err)
+	} else if router.Len() > 0 {
+		eng.RegisterProviderRouter(router)
+	}
 
 	res, err := eng.Review(context.Background(), model.ReviewRequest{
 		RepoPath: *repoPath,

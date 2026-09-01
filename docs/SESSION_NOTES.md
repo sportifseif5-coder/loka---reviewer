@@ -4,6 +4,56 @@
 > Updated at the end of every session. History is authoritative; this file is
 > the summary.
 
+## Session 4 - 2026-09-01: LLM provider layer
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Deterministic baseline (Session 3) plus
+  the LLM provider layer are done and CI-green. Agent layer and UI remain.
+- Branch `master`, remote `origin`. Pushed via the env-stripped push command.
+- CI (core + desktop, incl. real-netns offline tests) green on GitHub for
+  the previous commit. The offline-step battle: `setup-go` places go 1.25 on
+  PATH, but `sudo unshare` resets PATH (found go 1.24.13) and HOME (cold
+  module cache). Fix: preserve PATH, HOME, and GOMODCACHE through sudo and set
+  `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` for the isolated run.
+
+### What was built
+
+- `internal/provider`: `Provider` interface (Name/Local/Available/Complete),
+  `Router` with ADR-0003 routing (local always first, then remote unless
+  localOnly; failover on unavailable/error; `ErrNoProvider` when all fail).
+  OpenAI-compatible `client` with injectable `http.Transport` so request/parse
+  logic is tested without a socket (offline CI). Local providers `Ollama`
+  (localhost:11434) and `LlamaCpp` (localhost:8080), remote
+  `OpenAICompatible` (BYO key via `api_key_env`), `FixtureProvider` (recorded
+  transcripts, empty-prompt wildcard, never opens a socket, no keys). Factory
+  `FromConfig`/`Resolve`; unknown provider names are errors that degrade at
+  CLI level, never abort.
+- Engine LLM stage (`internal/review/llm.go` + wiring): `RegisterProviderRouter`;
+  runs after the deterministic baseline; offline mode gates to local-only
+  (I6); every failure path adds a degradation and ships the baseline (I2/I3).
+  `packContext` (changed files' added lines + baseline findings) feeds the
+  prompt; output parsed as JSON findings, each validated for location+message
+  (I8), labeled `Source=llm`, `Confidence=0.5` (ranked below baseline).
+- Tests: router policy (local-preferred, failover, offline-excludes-remote,
+  empty), fixture replay + wildcard, HTTP request shape/parse via fake
+  transport, ping semantics, FromConfig; engine tests for merge, offline
+  remote exclusion, failure-degrade-keeps-baseline; unit tests for
+  parseLLMFindings and packContext.
+- CLI `loka review`: builds the router from config, registers it; provider
+  misconfiguration logs a warning and disables the LLM stage.
+- E2E re-verified on `/tmp/e2e`: 5 baseline findings persist; with no Ollama
+  running the LLM stage degrades ("no provider available") and the baseline
+  still ships.
+
+### Next session
+
+1. Agent layer (`internal/agent`): Review Agent + Verification Agent on top of
+   the provider router; richer context pack assembly with token budgeting.
+2. UI: findings list + inline diff in the Wails workbench.
+3. Codegraph install for this repo's navigation; archify skill (user to
+   provide source/content).
+
 ## Session 3 - 2026-08-31: Phase 1 deterministic core
 
 ### State
