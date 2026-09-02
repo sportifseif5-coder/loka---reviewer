@@ -126,6 +126,10 @@ CREATE TABLE learnings (
 	`
 ALTER TABLE findings ADD COLUMN evidence TEXT NOT NULL DEFAULT '[]';
 `,
+	// v5: findings carry a demotion flag set by the verification agent.
+	`
+ALTER TABLE findings ADD COLUMN demoted INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 // migrate applies pending migrations in order, each inside a transaction.
@@ -193,11 +197,11 @@ VALUES (?, ?, ?, ?, ?, ?)`,
 		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO findings
-    (id, review_id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (id, review_id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence, demoted)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			f.ID, r.ID, f.RuleID, f.Category, string(f.Severity), string(f.Source),
 			f.Location.File, nullableInt(f.Location.LineStart), nullableInt(f.Location.LineEnd),
-			f.Message, f.Reasoning, f.Confidence, string(evidence)); err != nil {
+			f.Message, f.Reasoning, f.Confidence, string(evidence), boolInt(f.Demoted)); err != nil {
 			return fmt.Errorf("insert finding: %w", err)
 		}
 	}
@@ -226,7 +230,7 @@ FROM reviews WHERE id = ?`, id)
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence
+SELECT id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence, demoted
 FROM findings WHERE review_id = ? ORDER BY file_path, line_start`, id)
 	if err != nil {
 		return nil, err
@@ -237,12 +241,14 @@ FROM findings WHERE review_id = ? ORDER BY file_path, line_start`, id)
 		var sev, src string
 		var lineStart, lineEnd sql.NullInt64
 		var evidence string
+		var demoted int
 		if err := rows.Scan(&f.ID, &f.RuleID, &f.Category, &sev, &src, &f.Location.File,
-			&lineStart, &lineEnd, &f.Message, &f.Reasoning, &f.Confidence, &evidence); err != nil {
+			&lineStart, &lineEnd, &f.Message, &f.Reasoning, &f.Confidence, &evidence, &demoted); err != nil {
 			return nil, err
 		}
 		f.Severity = model.Severity(sev)
 		f.Source = model.Source(src)
+		f.Demoted = demoted != 0
 		if lineStart.Valid {
 			f.Location.LineStart = int(lineStart.Int64)
 		}
@@ -264,4 +270,11 @@ func nullableInt(v int) any {
 		return nil
 	}
 	return v
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

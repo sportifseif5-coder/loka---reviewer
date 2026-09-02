@@ -4,6 +4,52 @@
 > Updated at the end of every session. History is authoritative; this file is
 > the summary.
 
+## Session 5 - 2026-09-02: Agent layer (Review + Verification)
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Deterministic baseline, LLM provider
+  layer, and the agent layer are done and CI-green. Remaining Phase 1 scope:
+  UI workbench (repo picker, findings list, inline diff, apply-suggestion,
+  history) and the lightweight graph index.
+- Branch `master`, remote `origin`. Pushed via the env-stripped push command.
+
+### What was built
+
+- `internal/agent` (architecture section 8): `Agent` interface + `Request`
+  (RepoPath, Changed, Baseline, Budget) and `Result` (Findings, Model, Usage,
+  Invalid, Demoted). `splitBudget` divides review tokens into a 3:1
+  context:output split.
+- `ReviewAgent`: assembles the token-budgeted context pack, completes through
+  the provider router (localOnly in offline mode, I6), parses the JSON
+  response into candidates (I8: entries without location+message are dropped
+  and counted), then runs the verification stage. No network path of its own.
+- `packContext` (architecture 4.2): diff added lines + deterministic baseline.
+  Baseline is written first and never truncated; the diff tail is dropped on
+  budget exhaustion with a truncation marker. (Full relevance-ordering waits
+  for the graph index.)
+- `VerificationAgent`: deterministic false-positive check. A candidate whose
+  file+line lands on an added line is confirmed (confidence 0.6); anything
+  else is **demoted, never deleted** (severity capped at info, confidence 0.2,
+  `Finding.Demoted=true`). Store v5 migration adds the `demoted` column.
+- Engine `llmStage` now delegates to `agent.NewReviewAgent()`; the old
+  `internal/review/llm.go` context/prompt/parse code was relocated into the
+  agent package (files git-removed).
+- Tests: agent unit tests (verify demote-not-delete, parse drops invalid,
+  pack truncates-by-budget but keeps baseline, full pipeline via fixture
+  provider, no-provider and unmatched-fixture errors, budget split) and engine
+  tests rewritten (merge-verified, demote-non-added-line, offline excludes
+  remote, failure keeps baseline). All offline-safe; CI incl. netns is green.
+- E2E re-verified on `/tmp/e2e`.
+
+### Next session
+
+1. UI workbench: findings list + inline diff rendering with apply-suggestion
+   (user-confirmed, I7), review history in the Wails shell.
+2. Lightweight graph index (`internal/indexer`): files/symbols/refs tables
+   (schema v2 exists), incremental updates, `ImpactSet(diff)` feeding richer
+   context packs.
+
 ## Session 4 - 2026-09-01: LLM provider layer
 
 ### State

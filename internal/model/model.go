@@ -47,6 +47,10 @@ type Finding struct {
 	Reasoning  string   `json:"reasoning,omitempty"`
 	Evidence   []string `json:"evidence,omitempty"`
 	Confidence float64  `json:"confidence"`
+	// Demoted marks an LLM/agent finding that the verification agent could
+	// not confirm against the added lines. Demoted findings are kept (never
+	// silently deleted) but capped at info severity and ranked last.
+	Demoted bool `json:"demoted,omitempty"`
 }
 
 // ReviewRequest asks the engine to review a repository.

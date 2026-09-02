@@ -2,8 +2,11 @@ package review
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/sportifseif5-coder/loka---reviewer/internal/agent"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
@@ -12,6 +15,16 @@ import (
 	"github.com/sportifseif5-coder/loka---reviewer/internal/store"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/vcs"
 )
+
+// fixtureAgentRouter builds a router with one local fixture provider whose
+// recorded response fires for the review prompt (system matches, prompt
+// wildcard). remote flips the fixture to a remote routing locality.
+func fixtureAgentRouter(remote bool, response string) *provider.Router {
+	r := provider.NewRouter()
+	r.Add(provider.NewFixture("fx", "qwen-test", !remote,
+		provider.Fixture{System: agent.SystemPrompt, Response: response}))
+	return r
+}
 
 func TestLLMStageMergesFindings(t *testing.T) {
 	repo := fixtureRepo(t)
@@ -27,15 +40,9 @@ func TestLLMStageMergesFindings(t *testing.T) {
 	eng.RegisterAnalyzer(analyzer.SecretDetector{})
 	eng.RegisterRules(rules.Defaults())
 
-	fx := provider.NewFixture("fx", "qwen-test", true,
-		provider.Fixture{
-			System: llmSystemPrompt,
-			Response: `[{"file":"app.go","line":4,"severity":"error",
-				"message":"missing nil check","reasoning":"x may be nil"}]`,
-		})
-	r := provider.NewRouter()
-	r.Add(fx)
-	eng.RegisterProviderRouter(r)
+	// app.go is a newly added file, so line 7 is an added line -> verified.
+	eng.RegisterProviderRouter(fixtureAgentRouter(false, `[{"file":"app.go","line":7,"severity":"warning",
+		"message":"println swallows errors","reasoning":"use fmt.Fprintf to a writer"}]`))
 
 	res, err := eng.Review(context.Background(), model.ReviewRequest{RepoPath: repo})
 	if err != nil {
@@ -51,11 +58,11 @@ func TestLLMStageMergesFindings(t *testing.T) {
 	if llm == nil {
 		t.Fatalf("no LLM finding merged (%d findings)", len(res.Findings))
 	}
-	if llm.Location.File != "app.go" || llm.Location.LineStart != 4 {
-		t.Errorf("llm location = %+v, want app.go:4", llm.Location)
+	if llm.Demoted {
+		t.Errorf("finding on an added line must be verified, not demoted")
 	}
-	if llm.Severity != model.SeverityError {
-		t.Errorf("llm severity = %q, want error", llm.Severity)
+	if llm.Confidence != agent.ConfirmConfidence {
+		t.Errorf("verified confidence = %v, want %v", llm.Confidence, agent.ConfirmConfidence)
 	}
 	if llm.Reasoning == "" {
 		t.Errorf("llm finding must carry reasoning (I8)")
@@ -69,6 +76,65 @@ func TestLLMStageMergesFindings(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("AnalyzersRun = %v, want llm:qwen-test recorded", res.AnalyzersRun)
+	}
+}
+
+func TestLLMStageDemotesNonAddedLine(t *testing.T) {
+	repo := fixtureRepo(t)
+	// Make base.go a modified file: its committed line 1 is now unchanged.
+	content := []byte("package e2e\n\n// Added is new.\nfunc Added() {}\n")
+	if err := os.WriteFile(filepath.Join(repo, "base.go"), content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Default()
+	s, err := store.Open("")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	eng := NewEngine(cfg, s)
+	eng.RegisterVCS(vcs.NewGit())
+	eng.RegisterAnalyzer(analyzer.SecretDetector{})
+	eng.RegisterRules(rules.Defaults())
+
+	// base.go:1 is the unchanged package clause -> must be demoted.
+	eng.RegisterProviderRouter(fixtureAgentRouter(false, `[{"file":"base.go","line":1,"severity":"error",
+		"message":"something is off","reasoning":"flagged anyway"}]`))
+
+	res, err := eng.Review(context.Background(), model.ReviewRequest{RepoPath: repo})
+	if err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+
+	var llm *model.Finding
+	for i := range res.Findings {
+		if res.Findings[i].Source == model.SourceLLM {
+			llm = &res.Findings[i]
+		}
+	}
+	if llm == nil {
+		t.Fatalf("no LLM finding present")
+	}
+	if !llm.Demoted {
+		t.Errorf("finding off added lines must be demoted")
+	}
+	if llm.Severity != model.SeverityInfo {
+		t.Errorf("demoted severity = %q, want info", llm.Severity)
+	}
+	if llm.Confidence != agent.DemoteConfidence {
+		t.Errorf("demoted confidence = %v, want %v", llm.Confidence, agent.DemoteConfidence)
+	}
+
+	found := false
+	for _, d := range res.Degradations {
+		if contains(d, "demoted 1 finding(s)") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Degradations = %v, want a demotion note", res.Degradations)
 	}
 }
 
@@ -86,11 +152,7 @@ func TestLLMStageOfflineExcludesRemote(t *testing.T) {
 	eng.RegisterAnalyzer(analyzer.SecretDetector{})
 	eng.RegisterRules(rules.Defaults())
 
-	fx := provider.NewFixture("remote-fx", "qwen-test", false,
-		provider.Fixture{System: llmSystemPrompt, Response: `[{"file":"app.go","line":4,"message":"x"}]`})
-	r := provider.NewRouter()
-	r.Add(fx)
-	eng.RegisterProviderRouter(r)
+	eng.RegisterProviderRouter(fixtureAgentRouter(true, `[{"file":"app.go","line":7,"message":"x"}]`))
 
 	res, err := eng.Review(context.Background(), model.ReviewRequest{RepoPath: repo})
 	if err != nil {
@@ -134,7 +196,6 @@ func TestLLMStageFailureDegradesAndKeepsBaseline(t *testing.T) {
 	if len(res.Degradations) == 0 {
 		t.Errorf("expected a degradation when the LLM stage fails")
 	}
-	// Baseline must still ship: secret + debug-print findings.
 	var secrets, debug int
 	for _, f := range res.Findings {
 		switch f.RuleID {

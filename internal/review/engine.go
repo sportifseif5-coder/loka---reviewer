@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/sportifseif5-coder/loka---reviewer/internal/agent"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
@@ -121,42 +122,38 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 	return res, nil
 }
 
-// llmStage runs the optional provider-router stage over the changed files and
-// the deterministic baseline. In offline mode only local providers are
-// eligible; remote providers require the per-repository consent implied by a
-// non-offline mode (invariant I6). Every failure path degrades to a note and
-// returns no findings; the baseline is always delivered.
+// llmStage runs the agent-layer review pass over the changed files and the
+// deterministic baseline. In offline mode only local providers are eligible;
+// remote providers require the per-repository consent implied by a non-offline
+// mode (invariant I6). Every failure path degrades to a note and returns no
+// findings; the baseline is always delivered.
 func (e *Engine) llmStage(ctx context.Context, unit analyzer.AnalysisUnit, baseline []model.Finding, res *model.ReviewResult) []model.Finding {
 	if e.router == nil {
 		return nil
 	}
 
 	localOnly := e.cfg.Mode == config.ModeOffline
-	prompt := packContext(unit, baseline)
-	result, err := e.router.Complete(ctx, provider.Request{
-		System:      llmSystemPrompt,
-		Prompt:      prompt,
-		MaxTokens:   e.cfg.Budgets.ReviewTokens,
-		Temperature: 0.2,
-	}, localOnly)
+	ar, err := agent.NewReviewAgent().Run(ctx, e.router, localOnly, agent.Request{
+		RepoPath: unit.RepoPath,
+		Changed:  unit.Changed,
+		Baseline: baseline,
+		Budget:   e.cfg.Budgets.ReviewTokens,
+	})
 	if err != nil {
 		res.Degradations = append(res.Degradations,
 			fmt.Sprintf("LLM stage skipped: %v", err))
 		return nil
 	}
-
-	findings, dropped, err := parseLLMFindings(result.Content)
-	if err != nil {
+	if ar.Invalid > 0 {
 		res.Degradations = append(res.Degradations,
-			fmt.Sprintf("LLM stage skipped: %v", err))
-		return nil
+			fmt.Sprintf("LLM stage dropped %d finding(s) missing location or message", ar.Invalid))
 	}
-	if dropped > 0 {
+	if ar.Demoted > 0 {
 		res.Degradations = append(res.Degradations,
-			fmt.Sprintf("LLM stage dropped %d finding(s) missing location or message", dropped))
+			fmt.Sprintf("LLM stage demoted %d finding(s) not on added lines", ar.Demoted))
 	}
-	res.AnalyzersRun = append(res.AnalyzersRun, "llm:"+result.Model)
-	return findings
+	res.AnalyzersRun = append(res.AnalyzersRun, "llm:"+ar.Model)
+	return ar.Findings
 }
 
 // collectDiff populates the changed-file slice from the VCS adapter,
