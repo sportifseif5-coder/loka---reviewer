@@ -4,6 +4,63 @@
 > Updated at the end of every session. History is authoritative; this file is
 > the summary.
 
+## Session 6 - 2026-09-04: Lightweight graph index (files, symbols, refs)
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Deterministic baseline, provider layer,
+  and agent layer are done and CI-green. The indexer's files/symbols/reference
+  extraction with incremental updates is now built and CI-green; remaining
+  Phase 1 scope: indexer `ImpactSet(diff)`/query surface feeding context
+  packs, and the UI workbench.
+- Branch `master`, remote `origin`. Pushed via the env-stripped push command.
+
+### What was built
+
+- `internal/store` index tables rebuilt repo-scoped (v6 migration) so one
+  shared per-user DB can hold several repositories: `index_files`
+  (PK repo_path+path), `index_symbols` and `index_refs` (symbols keyed
+  (repo_path, file_path, name); refs as symbol->symbol edges with FK cascades
+  to files/symbols), `index_imports`. `PRAGMA foreign_keys=ON` in `Open`.
+- `internal/store/index.go`: `ReplaceDirIndex` (transactional full replace of
+  one package directory; validates every ref endpoint resolves to a symbol in
+  the written set), `DeleteDirIndex`, `IndexHashes` (incremental driver),
+  `DirIndex` load with denormalized refs. Fixed the load query alias bug
+  (`src.file_path` -> `src.path`).
+- `internal/indexer`: pure-Go stdlib backend (`go/parser` + `go/ast`; no new
+  deps), fully offline and deterministic.
+  - `Sync`: discovers `.go` files (hash via sha256), diffs against stored
+    hashes, and re-parses only stale **package directories** (whole-dir
+    replace keeps a package's rows internally consistent). Dry-run with a nil
+    store computes the same summary without persisting.
+  - `golang.go`: parse + file-scope symbols (funcs, methods qualified by
+    receiver base type e.g. `Store.Save`, types/structs/interfaces, consts,
+    vars; blank `_` skipped) and imports; `packageTable` groups symbols by
+    package clause so external `_test` packages resolve against their own
+    table.
+  - `refs.go`: structural intra-package reference resolver (no go/types).
+    Walks each file with lexical shadow scopes (receiver/params, short vars,
+    range vars, blocks, clauses) so locals never masquerade as package
+    symbols; records `call` edges for direct calls and `use` edges for other
+    references (incl. cross-file, embedded types, signature/receiver type
+    uses); drops self-edges and duplicates; parse failures are skipped and
+    reported, never fatal.
+- Tests (`internal/indexer/indexer_test.go`): fixture-module assertions on
+  the exact extracted symbol/ref set (including shadow-guard negatives),
+  run-to-run determinism, broken-file skip, incremental no-op on unchanged
+  resync + single-dir reparse on touch + delete-of-empty-dir, persistence
+  round-trip, dry-run summary. All offline-safe.
+- Quality gates: `make lint` and `go test ./... -count=1` green.
+
+### Next session
+
+1. Indexer query surface: `Callers(symbol)`, `Callees(symbol)`,
+   `TypeUses(type)`, `Imports(file)`, and `ImpactSet(diff)` over the stored
+   edges (architecture 5.3), then feed the slice into agent context packs
+   (architecture 4.2 relevance ordering).
+2. UI workbench: findings list + inline diff with apply-suggestion
+   (user-confirmed, I7), review history in the Wails shell.
+
 ## Session 5 - 2026-09-02: Agent layer (Review + Verification)
 
 ### State
