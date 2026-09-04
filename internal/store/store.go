@@ -42,6 +42,12 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
+	// Enforce foreign keys so ON DELETE CASCADE keeps index files/symbols
+	// and review/finding rows consistent (SQLite disables this by default).
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	}
 	s := &Store{db: db}
 	if err := s.migrate(context.Background()); err != nil {
 		db.Close()
@@ -129,6 +135,61 @@ ALTER TABLE findings ADD COLUMN evidence TEXT NOT NULL DEFAULT '[]';
 	// v5: findings carry a demotion flag set by the verification agent.
 	`
 ALTER TABLE findings ADD COLUMN demoted INTEGER NOT NULL DEFAULT 0;
+`,
+	// v6: rebuild the index tables repo-scoped. The v2 index tables keyed
+	// files by bare path, which collides when one shared database holds
+	// several repositories (the default user data dir does). They were never
+	// written (the indexer ships after this migration), so the rebuild is
+	// lossless. Files now carry repo_path as part of the primary key and all
+	// cascade deletes are enforced by PRAGMA foreign_keys = ON.
+	`
+DROP TABLE IF EXISTS index_refs;
+DROP TABLE IF EXISTS index_symbols;
+DROP TABLE IF EXISTS index_files;
+
+CREATE TABLE index_files (
+    repo_path  TEXT NOT NULL,
+    path       TEXT NOT NULL,
+    language   TEXT NOT NULL DEFAULT '',
+    hash       TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (repo_path, path)
+);
+
+CREATE TABLE index_symbols (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_path TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    name      TEXT NOT NULL,
+    kind      TEXT NOT NULL,
+    line      INTEGER NOT NULL,
+    FOREIGN KEY (repo_path, file_path)
+        REFERENCES index_files(repo_path, path) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_symbols_name ON index_symbols(repo_path, name);
+CREATE INDEX idx_symbols_file ON index_symbols(repo_path, file_path);
+
+CREATE TABLE index_refs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_path     TEXT NOT NULL,
+    src_symbol_id INTEGER NOT NULL REFERENCES index_symbols(id) ON DELETE CASCADE,
+    dst_symbol_id INTEGER REFERENCES index_symbols(id) ON DELETE CASCADE,
+    kind          TEXT NOT NULL
+);
+
+CREATE INDEX idx_refs_src ON index_refs(repo_path, src_symbol_id);
+CREATE INDEX idx_refs_dst ON index_refs(repo_path, dst_symbol_id);
+
+CREATE TABLE index_imports (
+    repo_path   TEXT NOT NULL,
+    file_path   TEXT NOT NULL,
+    import_path TEXT NOT NULL,
+    FOREIGN KEY (repo_path, file_path)
+        REFERENCES index_files(repo_path, path) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_imports_file ON index_imports(repo_path, file_path);
 `,
 }
 
