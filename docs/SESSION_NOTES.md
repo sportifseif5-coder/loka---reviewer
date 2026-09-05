@@ -4,6 +4,56 @@
 > Updated at the end of every session. History is authoritative; this file is
 > the summary.
 
+## Session 7 - 2026-09-05: Indexer query surface
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Deterministic baseline, provider layer,
+  agent layer, and the indexer (files/symbols/refs + incremental updates)
+  are done and CI-green. The indexer query surface (Callers/Callees/TypeUses/
+  Imports/FilesTouching/ImpactSet over the stored edges, architecture 5.3) is
+  now built and CI-green. Remaining Phase 1 scope: feeding the impact slice
+  into agent context packs (architecture 4.2), and the UI workbench.
+- Branch `master`, remote `origin`. Pushed via the env-stripped push command.
+
+### What was built
+
+- `internal/store`: `RepoIndex` returns the whole repo index (files with
+  symbols/imports + denormalized ref edges) as a deterministic `IndexSnapshot`;
+  `DirIndex` was refactored to filter the same snapshot instead of running its
+  own queries. Added targeted read helpers used by the query surface:
+  `RefsTo`/`RefsFrom` (edges by declaring file+symbol, ordered),
+  `FileImports`, and `SymbolKind`.
+- `internal/indexer/query.go` (architecture 5.3 query surface):
+  - `Callers(symbol)` / `Callees(symbol)` over stored edges (deduped,
+    deterministic order by file/name/kind).
+  - `TypeUses(type)`: Callers for a symbol whose stored kind is
+    type/struct/interface (a non-type is an error).
+  - `Imports(file)` and `FilesTouching(symbol)` (declaring file + every
+    referencing file).
+  - `ImpactSet(diff)`: BFS over a file-level adjacency graph derived from the
+    symbol edges, bounded by `impactMaxDepth` (2). Returns the changed files
+    at distance 0 plus files whose symbols reference them / they reference,
+    ordered by distance then path. No cross-package edges exist at v1, so
+    impact stays within the changed files' package directory.
+  - All query methods error on a nil (dry-run) store; everything is offline.
+- Tests (`internal/indexer/query_test.go`): exact caller/callee/type-use sets
+  on the demo fixtures, non-type `TypeUses` rejection, imports, files
+  touching, single- and multi-file impact sets, determinism (input order does
+  not change output), nil-store errors, sorted output. `internal/store`
+  round-trips through `RepoIndex`/`DirIndex` still green.
+- Quality gates: `make ci` green locally incl. the real-netns offline run and
+  the desktop build.
+
+### Next session
+
+1. Feed the impact slice into agent context packs (architecture 4.2): the
+   engine/`llmStage` path should sync the index, call `ImpactSet` on the
+   working-tree diff, and include the relevant files' code by relevance
+   instead of the current diff-only ordering.
+2. UI workbench: findings list + inline diff with apply-suggestion
+   (user-confirmed, I7), review history in the Wails shell.
+
 ## Session 6 - 2026-09-04: Lightweight graph index (files, symbols, refs)
 
 ### State

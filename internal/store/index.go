@@ -215,8 +215,127 @@ func (s *Store) IndexHashes(ctx context.Context, repoPath string) (map[string]st
 	return out, rows.Err()
 }
 
+// RefsTo returns every stored reference edge whose destination symbol is the
+// declaration (file, name). Results are deterministically ordered.
+func (s *Store) RefsTo(ctx context.Context, repoPath, file, name string) ([]IndexRef, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT src.path, srcs.name, dst.path, dsts.name, r.kind
+FROM index_refs r
+JOIN index_symbols srcs ON r.src_symbol_id = srcs.id
+JOIN index_files    src  ON srcs.repo_path = src.repo_path AND srcs.file_path = src.path
+JOIN index_symbols dsts ON r.dst_symbol_id = dsts.id
+JOIN index_files    dst  ON dsts.repo_path = dst.repo_path AND dsts.file_path = dst.path
+WHERE r.repo_path = ? AND dst.path = ? AND dsts.name = ?
+ORDER BY src.path, srcs.name, dst.path, dsts.name, r.kind`, repoPath, file, name)
+	if err != nil {
+		return nil, fmt.Errorf("query refs to %s.%s: %w", file, name, err)
+	}
+	defer rows.Close()
+	return scanRefs(rows)
+}
+
+// RefsFrom returns every stored reference edge whose source symbol is the
+// declaration (file, name). Results are deterministically ordered.
+func (s *Store) RefsFrom(ctx context.Context, repoPath, file, name string) ([]IndexRef, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT src.path, srcs.name, dst.path, dsts.name, r.kind
+FROM index_refs r
+JOIN index_symbols srcs ON r.src_symbol_id = srcs.id
+JOIN index_files    src  ON srcs.repo_path = src.repo_path AND srcs.file_path = src.path
+JOIN index_symbols dsts ON r.dst_symbol_id = dsts.id
+JOIN index_files    dst  ON dsts.repo_path = dst.repo_path AND dsts.file_path = dst.path
+WHERE r.repo_path = ? AND src.path = ? AND srcs.name = ?
+ORDER BY src.path, srcs.name, dst.path, dsts.name, r.kind`, repoPath, file, name)
+	if err != nil {
+		return nil, fmt.Errorf("query refs from %s.%s: %w", file, name, err)
+	}
+	defer rows.Close()
+	return scanRefs(rows)
+}
+
+// FileImports returns the import paths of one indexed file, sorted.
+func (s *Store) FileImports(ctx context.Context, repoPath, file string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT import_path FROM index_imports WHERE repo_path = ? AND file_path = ? ORDER BY import_path`,
+		repoPath, file)
+	if err != nil {
+		return nil, fmt.Errorf("query imports of %s: %w", file, err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var imp string
+		if err := rows.Scan(&imp); err != nil {
+			return nil, err
+		}
+		out = append(out, imp)
+	}
+	return out, rows.Err()
+}
+
+// SymbolKind returns the kind of the symbol declared in file with name, and
+// whether it exists.
+func (s *Store) SymbolKind(ctx context.Context, repoPath, file, name string) (string, bool, error) {
+	var kind string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT kind FROM index_symbols WHERE repo_path = ? AND file_path = ? AND name = ?`,
+		repoPath, file, name).Scan(&kind)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("query kind of %s.%s: %w", file, name, err)
+	}
+	return kind, true, nil
+}
+
+// scanRefs drains a ref result set into IndexRef rows.
+func scanRefs(rows *sql.Rows) ([]IndexRef, error) {
+	var out []IndexRef
+	for rows.Next() {
+		var sf, sn, df, dn, kind string
+		if err := rows.Scan(&sf, &sn, &df, &dn, &kind); err != nil {
+			return nil, err
+		}
+		out = append(out, IndexRef{SrcFile: sf, SrcName: sn, DstFile: df, DstName: dn, Kind: kind})
+	}
+	return out, rows.Err()
+}
+
+// IndexSnapshot is the whole stored index of one repository: every indexed
+// file with its symbols and imports, plus every intra-package reference edge.
+// It is the read surface the query API (architecture section 5.3) runs over,
+// and the deterministic order is what makes query results reproducible.
+type IndexSnapshot struct {
+	Files []IndexFile
+	Refs  []IndexRef
+}
+
 // DirIndex loads the full index of one package directory.
 func (s *Store) DirIndex(ctx context.Context, repoPath, dir string) (*DirIndex, error) {
+	snap, err := s.RepoIndex(ctx, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	di := &DirIndex{Dir: dir}
+	for _, f := range snap.Files {
+		if dirOf(f.Path) == dir {
+			di.Files = append(di.Files, f)
+		}
+	}
+	for _, r := range snap.Refs {
+		if dirOf(r.SrcFile) == dir && dirOf(r.DstFile) == dir {
+			di.Refs = append(di.Refs, r)
+		}
+	}
+	return di, nil
+}
+
+// RepoIndex loads the full index of a repository: files (with symbols and
+// imports) and intra-package reference edges, denormalized to symbol names.
+// Rows are deterministically sorted so callers can filter without losing
+// reproducibility.
+func (s *Store) RepoIndex(ctx context.Context, repoPath string) (*IndexSnapshot, error) {
 	// Files and their symbols.
 	fileRows, err := s.db.QueryContext(ctx, `
 SELECT f.path, f.language, f.hash, sy.name, sy.kind, sy.line
@@ -225,7 +344,7 @@ LEFT JOIN index_symbols sy
   ON sy.repo_path = f.repo_path AND sy.file_path = f.path
 WHERE f.repo_path = ?`, repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("query dir symbols: %w", err)
+		return nil, fmt.Errorf("query repo symbols: %w", err)
 	}
 	defer fileRows.Close()
 
@@ -237,9 +356,6 @@ WHERE f.repo_path = ?`, repoPath)
 		var line sql.NullInt64
 		if err := fileRows.Scan(&p, &lang, &hash, &name, &kind, &line); err != nil {
 			return nil, err
-		}
-		if dirOf(p) != dir {
-			continue
 		}
 		f, ok := filesByPath[p]
 		if !ok {
@@ -259,7 +375,7 @@ WHERE f.repo_path = ?`, repoPath)
 	impRows, err := s.db.QueryContext(ctx, `
 SELECT file_path, import_path FROM index_imports WHERE repo_path = ?`, repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("query dir imports: %w", err)
+		return nil, fmt.Errorf("query repo imports: %w", err)
 	}
 	defer impRows.Close()
 	for impRows.Next() {
@@ -285,26 +401,23 @@ JOIN index_symbols dsts ON r.dst_symbol_id = dsts.id
 JOIN index_files    dst  ON dsts.repo_path = dst.repo_path AND dsts.file_path = dst.path
 WHERE r.repo_path = ?`, repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("query dir refs: %w", err)
+		return nil, fmt.Errorf("query repo refs: %w", err)
 	}
 	defer refRows.Close()
 
-	di := &DirIndex{Dir: dir}
+	snap := &IndexSnapshot{}
 	refSeen := map[string]bool{}
 	for refRows.Next() {
 		var sf, sn, df, dn, kind string
 		if err := refRows.Scan(&sf, &sn, &df, &dn, &kind); err != nil {
 			return nil, err
 		}
-		if dirOf(sf) != dir || dirOf(df) != dir {
-			continue
-		}
 		key := strings.Join([]string{sf, sn, df, dn, kind}, "\x00")
 		if refSeen[key] {
 			continue
 		}
 		refSeen[key] = true
-		di.Refs = append(di.Refs, IndexRef{SrcFile: sf, SrcName: sn, DstFile: df, DstName: dn, Kind: kind})
+		snap.Refs = append(snap.Refs, IndexRef{SrcFile: sf, SrcName: sn, DstFile: df, DstName: dn, Kind: kind})
 	}
 	if err := refRows.Err(); err != nil {
 		return nil, err
@@ -320,10 +433,10 @@ WHERE r.repo_path = ?`, repoPath)
 			return f.Symbols[i].Name < f.Symbols[j].Name
 		})
 		sort.Strings(f.Imports)
-		di.Files = append(di.Files, *f)
+		snap.Files = append(snap.Files, *f)
 	}
-	sort.Slice(di.Refs, func(i, j int) bool {
-		a, b := di.Refs[i], di.Refs[j]
+	sort.Slice(snap.Refs, func(i, j int) bool {
+		a, b := snap.Refs[i], snap.Refs[j]
 		if a.SrcFile != b.SrcFile {
 			return a.SrcFile < b.SrcFile
 		}
@@ -338,7 +451,7 @@ WHERE r.repo_path = ?`, repoPath)
 		}
 		return a.Kind < b.Kind
 	})
-	return di, nil
+	return snap, nil
 }
 
 // symKey builds the id-map key for a symbol.
