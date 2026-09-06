@@ -4,6 +4,59 @@
 > Updated at the end of every session. History is authoritative; this file is
 > the summary.
 
+## Session 8 - 2026-09-06: Impact slice feeds agent context packs
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Deterministic baseline, provider layer,
+  agent layer, and the indexer (files/symbols/refs + incremental updates +
+  query surface) are done and CI-green. The graph-index impact slice now feeds
+  agent context packs (architecture 4.2 relevance ordering). Remaining Phase 1
+  scope: the UI workbench.
+- Branch `master`, remote `origin`. Pushed via the env-stripped push command.
+
+### What was built
+
+- `internal/agent`: `ContextFile{Path, Distance, Code}`; `Request` gains
+  `Relevant []ContextFile` (the impact-slice files beyond the diff). The
+  `SystemPrompt` now tells the model those files are context only (never
+  report on related-file lines).
+- `internal/agent/context.go`: `packContext` reworked into `emit` /
+  `emitDiff` / `emitRelevant` with deterministic relevance ordering
+  (architecture 4.2): baseline findings always emitted first and never
+  truncated (they are ground truth the model must not duplicate), then the
+  changed files' added lines, then related files' code sorted by `Distance`
+  asc then `Path`. Oversized packs truncate from the tail (farthest-impact
+  code first) and append `(context truncated to fit the token budget)`.
+- `internal/review/engine.go`: `llmStage` now passes `Relevant:
+  e.impactContext(...)`. `impactContext` guards nil store / empty changed set,
+  syncs the index, calls `ImpactSet` on the repo-relative changed paths,
+  `os.ReadFile`s every impacted file, and keeps only `Distance > 0` files
+  (the distance-0 changed files are already in the diff). Failures degrade:
+  new `index sync failed: %v` / `impact set failed: %v` degradation notes and
+  nil relevant (diff-only pack fallback, invariant I2).
+- Tests:
+  - `internal/agent/agent_test.go`: `TestPackContextTruncatesByBudgetNotBaseline`
+    (tiny budget keeps the full baseline and drops the diff), 
+    `TestPackContextIncludesRelevantByDistanceOrder` (4096 budget renders all
+    sections, nearest-impact related file first, no truncation marker),
+    `TestPackContextRelevantTruncatedAwayKeepsBaseline` (tiny budget drops the
+    impact tail but the baseline survives).
+  - `internal/review/engine_impact_test.go`: `TestLLMStageContextCarriesImpactFile`
+    builds a git repo where `caller.go` references `Callee` in `callee.go`,
+    then modifies `callee.go` in the working tree; a `captureProvider` records
+    the prompt and asserts the distance-1 `caller.go` header and its code
+    reached the context pack with no degradations.
+- Quality gates: `make ci` green locally incl. the real-netns offline run and
+  the desktop build.
+
+### Next session
+
+1. UI workbench: repo picker, findings list + inline diff with apply-suggestion
+   (user-confirmed, I7), review history in the Wails shell.
+2. Consider verifying the engine impact path against a multi-package fixture
+   once cross-package edges land (v1 impact stays inside the changed package).
+
 ## Session 7 - 2026-09-05: Indexer query surface
 
 ### State

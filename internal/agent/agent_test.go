@@ -109,6 +109,57 @@ func TestPackContextTruncatesByBudgetNotBaseline(t *testing.T) {
 	}
 }
 
+func TestPackContextIncludesRelevantByDistanceOrder(t *testing.T) {
+	req := Request{
+		Changed: sampleChanged(),
+		Relevant: []ContextFile{
+			// Deliberately unsorted: distance 2 before distance 1.
+			{Path: "far.go", Distance: 2, Code: "package a\nfunc Far() {}\n"},
+			{Path: "near.go", Distance: 1, Code: "package a\nfunc Near() { A() }\n"},
+		},
+	}
+	ctx := packContext(req, 4096)
+	near := strings.Index(ctx, "--- near.go (distance 1)")
+	far := strings.Index(ctx, "--- far.go (distance 2)")
+	if near < 0 || far < 0 {
+		t.Fatalf("relevant files missing from context:\n%s", ctx)
+	}
+	if near > far {
+		t.Errorf("closest-impact file must sort before farthest-impact:\n%s", ctx)
+	}
+	for _, want := range []string{"func Near() { A() }", "func Far() {}"} {
+		if !strings.Contains(ctx, want) {
+			t.Errorf("context missing relevant code %q:\n%s", want, ctx)
+		}
+	}
+	if strings.Contains(ctx, "context truncated") {
+		t.Errorf("large budget should not truncate:\n%s", ctx)
+	}
+}
+
+func TestPackContextRelevantTruncatedAwayKeepsBaseline(t *testing.T) {
+	req := Request{
+		Changed: sampleChanged(),
+		Baseline: []model.Finding{
+			{RuleID: "secret", Severity: model.SeverityCritical,
+				Location: model.Location{File: "a.go", LineStart: 1}, Message: "must survive"},
+		},
+		Relevant: []ContextFile{
+			{Path: "caller.go", Distance: 1, Code: "package a\nfunc Caller() { A() }\n"},
+		},
+	}
+	ctx := packContext(req, 20)
+	if !strings.Contains(ctx, "context truncated") {
+		t.Errorf("tiny budget must truncate:\n%s", ctx)
+	}
+	if !strings.Contains(ctx, "must survive") {
+		t.Errorf("baseline must survive relevant truncation:\n%s", ctx)
+	}
+	if strings.Contains(ctx, "func Caller") {
+		t.Errorf("related code must be truncated away before the baseline:\n%s", ctx)
+	}
+}
+
 func TestReviewAgentPipeline(t *testing.T) {
 	response := `[
 		{"file":"a.go","line":2,"severity":"error","message":"real","reasoning":"why"},

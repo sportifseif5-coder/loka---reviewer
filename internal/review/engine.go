@@ -10,12 +10,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/sportifseif5-coder/loka---reviewer/internal/agent"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/indexer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/provider"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/rules"
@@ -137,6 +139,7 @@ func (e *Engine) llmStage(ctx context.Context, unit analyzer.AnalysisUnit, basel
 		RepoPath: unit.RepoPath,
 		Changed:  unit.Changed,
 		Baseline: baseline,
+		Relevant: e.impactContext(ctx, unit, res),
 		Budget:   e.cfg.Budgets.ReviewTokens,
 	})
 	if err != nil {
@@ -154,6 +157,47 @@ func (e *Engine) llmStage(ctx context.Context, unit analyzer.AnalysisUnit, basel
 	}
 	res.AnalyzersRun = append(res.AnalyzersRun, "llm:"+ar.Model)
 	return ar.Findings
+}
+
+// impactContext feeds the graph-index impact slice into the context pack
+// (architecture sections 4.2 and 5.3): it syncs the index so the slice is
+// fresh, computes the files reachable from the changed files along reference
+// edges, and returns the code of every impacted file beyond the diff itself
+// (distance > 0), ordered by distance then path. It degrades to nil rather
+// than erroring: without a store, or when the index cannot be read, the LLM
+// stage still runs on the diff-only pack (invariant I2).
+func (e *Engine) impactContext(ctx context.Context, unit analyzer.AnalysisUnit, res *model.ReviewResult) []agent.ContextFile {
+	if e.store == nil || len(unit.Changed) == 0 {
+		return nil
+	}
+	ix := indexer.New(e.store)
+	if _, err := ix.Sync(ctx, unit.RepoPath); err != nil {
+		res.Degradations = append(res.Degradations,
+			fmt.Sprintf("index sync failed: %v", err))
+		return nil
+	}
+	changed := make([]string, 0, len(unit.Changed))
+	for _, cf := range unit.Changed {
+		changed = append(changed, cf.Path)
+	}
+	impact, err := ix.ImpactSet(ctx, unit.RepoPath, changed)
+	if err != nil {
+		res.Degradations = append(res.Degradations,
+			fmt.Sprintf("impact set failed: %v", err))
+		return nil
+	}
+	out := make([]agent.ContextFile, 0, len(impact))
+	for _, im := range impact {
+		if im.Distance == 0 {
+			continue // the changed files themselves are already in the diff
+		}
+		data, err := os.ReadFile(filepath.Join(unit.RepoPath, im.Path))
+		if err != nil {
+			continue // a related file may have moved between index and read
+		}
+		out = append(out, agent.ContextFile{Path: im.Path, Distance: im.Distance, Code: string(data)})
+	}
+	return out
 }
 
 // collectDiff populates the changed-file slice from the VCS adapter,

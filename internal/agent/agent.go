@@ -17,6 +17,17 @@ import (
 // DefaultBudget bounds a review pass when no budget is configured.
 const DefaultBudget = 12000
 
+// ContextFile is one file of the graph-index impact slice (architecture
+// section 5.3) whose code is included in the context pack so the model can
+// reason about callers/callees of the change. Distance ranks how directly the
+// file touches the changed files (1 = a file that references or is referenced
+// by a changed file). Code is the file's current content.
+type ContextFile struct {
+	Path     string
+	Distance int
+	Code     string
+}
+
 // Request is the input an agent turns into findings.
 type Request struct {
 	RepoPath string
@@ -25,6 +36,9 @@ type Request struct {
 	// Baseline carries the deterministic findings so the model does not
 	// duplicate them and can reason about them.
 	Baseline []model.Finding
+	// Relevant carries the impact-slice files' code beyond the diff, ordered
+	// by distance then path (see packContext).
+	Relevant []ContextFile
 	// Budget bounds context plus completion tokens for the pass. Zero means
 	// DefaultBudget.
 	Budget int
