@@ -60,6 +60,15 @@ func FileWindow(repoPath, file string, loc model.Location, radius int) ([]CodeLi
 	if end > total {
 		end = total
 	}
+	// A stale location past the end of the file still deserves context: fall
+	// back to the tail of the file rather than returning nothing.
+	if start > end {
+		start = total - radius
+		if start < 1 {
+			start = 1
+		}
+		end = total
+	}
 	if start > end {
 		return nil, nil
 	}

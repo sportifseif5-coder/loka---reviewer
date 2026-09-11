@@ -10,7 +10,7 @@
 > log. `make status-source` enforces the split so status cannot drift into
 > prose copies elsewhere.
 
-**Last updated:** 2026-09-11 (Session 9)
+**Last updated:** 2026-09-11 (Session 10)
 
 ## Legend and update protocol
 
@@ -104,11 +104,13 @@ budget; `[ ]` applied fixes only on explicit user action.
 
 - [x] Backend surface: `ListRepos`, `ListReviews`, `GetReview`,
       `ReviewContext`, `RepoMode`, store opened once in `startup`.
-- [ ] Repo picker and review trigger in `desktop/frontend`.
-- [ ] Findings list with severity/source filtering.
-- [ ] Inline diff/code view using `ReviewContext`.
-- [ ] Apply-suggestion (user-confirmed only, I7).
-- [ ] Review history view using `ListRepos`/`ListReviews`.
+- [x] Repo picker and review trigger in `desktop/frontend`.
+- [x] Findings list with severity/source filtering.
+- [x] Inline diff/code view using `ReviewContext` (a stale location past EOF
+      now falls back to the file tail).
+- [~] Apply-suggestion - deferred until findings carry suggested fixes
+      (Phase 2 Fix Agent); the UI exposes no inert apply control. (2026-09-11)
+- [x] Review history view using `ListRepos`/`ListReviews`/`GetReview`.
 
 ### 1.9 Phase 1 exit criteria (dogfood on this repo)
 
@@ -153,6 +155,5 @@ Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` full v1 scope passes all inv
 
 ## Next action
 
-Phase 1.8 - interactive frontend over the backend surface already in place
-(repo picker, review trigger, findings list, inline diff, history), then
-Phase 1.9 exit criteria. Narrative and rationale: `docs/SESSION_NOTES.md`.
+Phase 1.9 - run the exit-criteria review on this repository with a local
+model and record the result. Narrative and rationale: `docs/SESSION_NOTES.md`.

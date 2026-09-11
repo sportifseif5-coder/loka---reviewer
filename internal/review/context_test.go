@@ -42,6 +42,7 @@ func TestFileWindowAroundFinding(t *testing.T) {
 		{"multi-line range", model.Location{File: "pkg/a.go", LineStart: 5, LineEnd: 7}, 1, 4, 8},
 		{"clamped at start", model.Location{File: "pkg/a.go", LineStart: 1, LineEnd: 1}, 5, 1, 6},
 		{"clamped at end", model.Location{File: "pkg/a.go", LineStart: 20, LineEnd: 20}, 5, 15, 20},
+		{"stale location falls back to tail", model.Location{File: "pkg/a.go", LineStart: 200, LineEnd: 200}, 3, 17, 20},
 		{"zero radius uses default", model.Location{File: "pkg/a.go", LineStart: 10, LineEnd: 10}, 0, 7, 13},
 		{"missing line uses top", model.Location{File: "pkg/a.go"}, 1, 1, 2},
 	}

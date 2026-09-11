@@ -9,19 +9,60 @@
   <body>
     <header class="topbar">
       <h1>Loka</h1>
-      <span id="version" class="version"></span>
+      <span id="version" class="muted"></span>
+      <span id="mode" class="badge" hidden></span>
     </header>
-    <main class="workbench">
-      <section class="picker">
-        <label for="repo">Repository</label>
-        <input id="repo" type="text" placeholder="/path/to/repo" />
-        <button id="run" type="button">Run review</button>
-      </section>
-      <section class="results">
-        <div id="summary" class="summary"></div>
-        <div id="findings" class="findings"></div>
-      </section>
-    </main>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <section class="picker">
+          <label for="repo">Repository</label>
+          <input id="repo" type="text" placeholder="/path/to/repo" spellcheck="false" />
+          <div class="picker-actions">
+            <button id="open" type="button">Open</button>
+            <button id="run" type="button" class="primary">Run review</button>
+          </div>
+        </section>
+        <section class="history">
+          <h2>History</h2>
+          <div id="repos" class="repos"></div>
+        </section>
+      </aside>
+
+      <main class="results">
+        <div id="summary" class="summary">Open a repository, then run a review.</div>
+        <div id="notes" class="notes" hidden></div>
+        <div id="filters" class="filters" hidden>
+          <label>
+            Severity
+            <select id="severity">
+              <option value="">all</option>
+              <option value="critical">critical</option>
+              <option value="error">error</option>
+              <option value="warning">warning</option>
+              <option value="info">info</option>
+            </select>
+          </label>
+          <label>
+            Source
+            <select id="source">
+              <option value="">all</option>
+              <option value="analyzer">analyzer</option>
+              <option value="rule">rule</option>
+              <option value="llm">llm</option>
+              <option value="agent">agent</option>
+            </select>
+          </label>
+        </div>
+        <div class="panes">
+          <div id="findings" class="findings"></div>
+          <div id="detail" class="detail">
+            <p class="muted">Select a finding to see its evidence and code context.</p>
+          </div>
+        </div>
+      </main>
+    </div>
+
     <script src="main.js"></script>
   </body>
 </html>

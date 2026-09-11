@@ -5,6 +5,46 @@
 > the summary. This is a narrative log only: status checkboxes live solely in
 > `docs/PROGRESS.md`.
 
+## Session 10 - 2026-09-11: Interactive workbench frontend
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. The Wails workbench is now interactive
+  over the backend surface from Session 9. Remaining Phase 1 scope: the exit
+  criteria run (Phase 1.9). Apply-suggestion stays deferred until findings
+  carry suggested fixes (Phase 2 Fix Agent).
+- Branch `master`, remote `origin`. Pushed via the env-stripped push command.
+
+### What was built
+
+- `desktop/frontend`: replaced the stub with a workbench: repo picker + Open
+  and Run review; an execution-mode badge (`RepoMode`); review notes for
+  warnings/degradations; a findings list with severity and source filters;
+  selecting a finding shows message, reasoning, evidence, and an inline code
+  window from `ReviewContext`; a history sidebar (`ListRepos` -> per-repo
+  `ListReviews` -> `GetReview`). All rendering uses `textContent` (no HTML
+  injection from LLM-derived findings). A standalone-preview mock keeps the
+  page usable when the Wails bindings are absent.
+- `internal/review/context.go`: `FileWindow` now falls back to the file tail
+  when a (stale) location lies past EOF instead of returning nothing; added a
+  test case.
+- `desktop/frontend/dist` re-synced (the `go:embed` target).
+
+### Verified
+
+- `node --check` on `main.js`; a Node fake-DOM smoke harness
+  (`/tmp/opencode/domtest/smoke.mjs`) drives open repo, run review, filter,
+  and select-finding and asserts the rendered DOM (12 checks pass).
+- Go `TestFileWindow` incl. the stale-location fallback.
+- `make ci` green including the desktop build.
+
+### Next session
+
+1. Phase 1.9 exit criteria: run an offline review of this repository with a
+   local model, measure wall-clock and noise, and record the result.
+2. Revisit apply-suggestion once the Phase 2 Fix Agent produces suggested
+   diffs.
+
 ## Session 9 - 2026-09-11: Workbench backend surface
 
 ### State
