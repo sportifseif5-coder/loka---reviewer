@@ -3,6 +3,9 @@
 > Milestones are gated by exit criteria, not dates. A milestone is done when
 > its exit criteria pass on this repository's own codebase (constitution
 > section 10.4).
+>
+> Live per-task status lives in `docs/PROGRESS.md`; this file defines scope
+> and exit criteria.
 
 ## Phase 0 - Foundations
 

@@ -41,6 +41,10 @@
   `ListReviews`, `GetReview`, `ReviewContext` (inline code window), and
   `RepoMode` (mode banner, constitution section 8). All read-only against the
   working tree.
+- Docs/tracking: new `docs/PROGRESS.md` is the living phase/task/step
+  checklist (status legend + update protocol) covering Phases 0-3 and
+  post-v1. `AGENTS.md` now requires ticking it on every finished step, and
+  `docs/ROADMAP.md` points to it for live status.
 - Quality gates: `make ci` green locally incl. the real-netns offline run and
   the desktop build.
 

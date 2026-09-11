@@ -16,10 +16,13 @@ Read, in this order, before doing anything else:
 3. `docs/adr/README.md` and the ADRs it references - binding technical
    decisions.
 4. `docs/ROADMAP.md` - current phase and its exit criteria.
+5. `docs/PROGRESS.md` - the living phase/task/step checklist. It is the
+   checklist of record; keep it in sync with reality (section 4).
 
 ## 2. Recover the session state
 
-1. Read `docs/SESSION_NOTES.md` - it records what was done and what is next.
+1. Read `docs/SESSION_NOTES.md` and `docs/PROGRESS.md` - they record what was
+   done and what is next.
 2. Run `git log --oneline -10` and `git status` to confirm where the repo
    actually stands versus what the notes claim.
 3. If `docs/SESSION_NOTES.md` says a phase is in progress, resume it. Do not
@@ -39,10 +42,13 @@ Read, in this order, before doing anything else:
 
 Before finishing a session:
 
-1. Update `docs/SESSION_NOTES.md` with what changed and what is next.
-2. Run the quality gates (see ROADMAP / constitution section 11).
-3. Commit with a Conventional Commits message.
-4. Push to the configured remote. **A session that does not push leaves the
+1. Update `docs/PROGRESS.md`: tick every finished step/task and update its
+   **Last updated** line. This is mandatory on every step completion, not
+   only at session end.
+2. Update `docs/SESSION_NOTES.md` with what changed and what is next.
+3. Run the quality gates (see ROADMAP / constitution section 11).
+4. Commit with a Conventional Commits message.
+5. Push to the configured remote. **A session that does not push leaves the
    work at risk of loss. Pushing is not optional.**
 
 ## 5. Tooling notes
