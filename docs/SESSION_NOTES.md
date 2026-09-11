@@ -4,6 +4,55 @@
 > Updated at the end of every session. History is authoritative; this file is
 > the summary.
 
+## Session 9 - 2026-09-11: Workbench backend surface
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Core engine, indexer, and impact-slice
+  context packs are done and CI-green. This session added the backend surface
+  the UI workbench consumes (history reads, per-repo reviews, inline context,
+  mode banner). Remaining Phase 1 scope: the interactive Wails frontend
+  (repo picker, findings list, inline diff, apply-suggestion) and the exit
+  criteria run.
+- Branch `master`, remote `origin`. Pushed via the env-stripped push command.
+
+### What was built
+
+- `internal/store`: migration v7 adds `idx_reviews_repo_started` for the
+  history reads. New `RepoSummary` / `ReviewSummary` read models (JSON tags
+  matching the `model` conventions) and:
+  - `ListRepos`: one row per repository with stored reviews (most recent
+    review's mode/findings + total review count), newest first; a
+    `NOT EXISTS` latest-row filter with an `id` tie-break keeps ordering
+    deterministic when two reviews share a `started_at` second.
+  - `ListReviews(repoPath)`: the per-repository history, newest first.
+  - Tests (`store_test.go`) cover ordering, per-repo counts/last findings,
+    finished-at persistence, the same-second id tie-break, and an empty
+    (no-error) missing-repo result.
+- `internal/review/context.go`: `CodeLine` and `FileWindow(repoPath, file,
+  loc, radius)` return the working-tree lines around a finding (located range
+  plus `DefaultContextRadius` lines each side, clamped to the file). `safeJoin`
+  rejects absolute and `..`-escaping paths. Read-only (invariant I7). Tests
+  cover middle/edge clamping, multi-line ranges, default radius, and path
+  rejection.
+- `desktop/app.go`: `App` now opens the per-user store once in `startup`
+  (closed in `shutdown`, wired in `main.go`), and `Review` reuses it so
+  results persist into the same history. New Wails bindings: `ListRepos`,
+  `ListReviews`, `GetReview`, `ReviewContext` (inline code window), and
+  `RepoMode` (mode banner, constitution section 8). All read-only against the
+  working tree.
+- Quality gates: `make ci` green locally incl. the real-netns offline run and
+  the desktop build.
+
+### Next session
+
+1. Interactive frontend in `desktop/frontend`: repo picker + review trigger,
+   findings list (severity/source filtering), inline code/diff view via
+   `ReviewContext`, and review history via `ListRepos`/`ListReviews`/
+   `GetReview`.
+2. Run the Phase 1 exit-criteria review on this repository with a local model
+   and record the result.
+
 ## Session 8 - 2026-09-06: Impact slice feeds agent context packs
 
 ### State

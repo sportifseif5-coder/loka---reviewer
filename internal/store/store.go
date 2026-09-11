@@ -191,6 +191,13 @@ CREATE TABLE index_imports (
 
 CREATE INDEX idx_imports_file ON index_imports(repo_path, file_path);
 `,
+	// v7: history reads for the workbench. The reviews primary key is the id,
+	// so per-repository listing otherwise scans the whole table. The index
+	// serves both "most recent review per repository" (ListRepos) and "all
+	// reviews for one repository" (ListReviews), newest first.
+	`
+CREATE INDEX idx_reviews_repo_started ON reviews(repo_path, started_at DESC, id DESC);
+`,
 }
 
 // migrate applies pending migrations in order, each inside a transaction.
@@ -331,6 +338,89 @@ func nullableInt(v int) any {
 		return nil
 	}
 	return v
+}
+
+// RepoSummary is one row of the workbench "repositories" list: the most
+// recent review stored for a repository plus the number of reviews kept for
+// it.
+type RepoSummary struct {
+	RepoPath      string    `json:"repo_path"`
+	Mode          string    `json:"mode"`
+	LastStartedAt time.Time `json:"last_started_at"`
+	LastFindings  int       `json:"last_findings"`
+	ReviewCount   int       `json:"review_count"`
+}
+
+// ReviewSummary is one row of the per-repository review history list.
+type ReviewSummary struct {
+	ID            string    `json:"id"`
+	Mode          string    `json:"mode"`
+	StartedAt     time.Time `json:"started_at"`
+	FinishedAt    time.Time `json:"finished_at"`
+	FindingsCount int       `json:"findings_count"`
+}
+
+// ListRepos returns one summary per repository that has stored reviews, the
+// newest review first. The "latest" tie-break on id keeps the order
+// deterministic when two reviews share a started_at second.
+func (s *Store) ListRepos(ctx context.Context) ([]RepoSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT r.repo_path, r.mode, r.started_at, r.findings_count,
+       (SELECT COUNT(*) FROM reviews rc WHERE rc.repo_path = r.repo_path)
+FROM reviews r
+WHERE NOT EXISTS (
+    SELECT 1 FROM reviews r2
+    WHERE r2.repo_path = r.repo_path
+      AND (r2.started_at > r.started_at OR (r2.started_at = r.started_at AND r2.id > r.id))
+)
+ORDER BY r.started_at DESC, r.repo_path`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []RepoSummary
+	for rows.Next() {
+		var rs RepoSummary
+		var started string
+		if err := rows.Scan(&rs.RepoPath, &rs.Mode, &started, &rs.LastFindings, &rs.ReviewCount); err != nil {
+			return nil, err
+		}
+		if rs.LastStartedAt, err = time.Parse(time.RFC3339, started); err != nil {
+			return nil, err
+		}
+		out = append(out, rs)
+	}
+	return out, rows.Err()
+}
+
+// ListReviews returns the reviews stored for one repository, newest first.
+func (s *Store) ListReviews(ctx context.Context, repoPath string) ([]ReviewSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, mode, started_at, finished_at, findings_count
+FROM reviews WHERE repo_path = ?
+ORDER BY started_at DESC, id DESC`, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ReviewSummary
+	for rows.Next() {
+		var rs ReviewSummary
+		var started, finished string
+		if err := rows.Scan(&rs.ID, &rs.Mode, &started, &finished, &rs.FindingsCount); err != nil {
+			return nil, err
+		}
+		if rs.StartedAt, err = time.Parse(time.RFC3339, started); err != nil {
+			return nil, err
+		}
+		if rs.FinishedAt, err = time.Parse(time.RFC3339, finished); err != nil {
+			return nil, err
+		}
+		out = append(out, rs)
+	}
+	return out, rows.Err()
 }
 
 func boolInt(b bool) int {
