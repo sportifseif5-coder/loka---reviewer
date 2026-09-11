@@ -4,6 +4,11 @@
 > `docs/ROADMAP.md`. `docs/CONSTITUTION.md` remains the binding contract;
 > this file is the checklist of record for *what is done and what is next*.
 > Update it every time a step, task, or phase finishes (see protocol below).
+>
+> **This is the only file that carries status markers.** `docs/ROADMAP.md`
+> defines scope and exit criteria; `docs/SESSION_NOTES.md` is the narrative
+> log. `make status-source` enforces the split so status cannot drift into
+> prose copies elsewhere.
 
 **Last updated:** 2026-09-11 (Session 9)
 
@@ -27,7 +32,7 @@ Protocol:
 
 ## Phase 0 - Foundations - COMPLETE
 
-Exit criteria: `[x]` empty-review flow works end to end; `[x]` CI green with
+Exit criteria (defined in `docs/ROADMAP.md`): `[x]` empty-review flow works end to end; `[x]` CI green with
 network disabled.
 
 - [x] Go module and workspace layout (`cmd/`, `internal/`).
@@ -39,7 +44,7 @@ network disabled.
 
 ## Phase 1 - Offline MVP - IN PROGRESS
 
-Exit criteria: `[ ]` offline review of this repository with a local model
+Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` offline review of this repository with a local model
 produces verified findings in < 60s; `[ ]` false-positive rate within noise
 budget; `[ ]` applied fixes only on explicit user action.
 
@@ -113,7 +118,7 @@ budget; `[ ]` applied fixes only on explicit user action.
 
 ## Phase 2 - Online and Agent Mode - NOT STARTED
 
-Exit criteria: `[ ]` online review uses user keys with auditability;
+Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` online review uses user keys with auditability;
 `[ ]` agent mode cites external sources; `[ ]` learnings measurably reduce
 repeated dismissed categories.
 
@@ -128,7 +133,7 @@ repeated dismissed categories.
 
 ## Phase 3 - Hardening and Extension - NOT STARTED
 
-Exit criteria: `[ ]` full v1 scope passes all invariants and the quality bar;
+Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` full v1 scope passes all invariants and the quality bar;
 `[ ]` emitters are proven emit-only.
 
 - [ ] Benchmarks vs the noise budget on a fixed corpus; precision release
@@ -146,9 +151,8 @@ Exit criteria: `[ ]` full v1 scope passes all invariants and the quality bar;
 - [ ] Team features, dashboards, SSO (server component).
 - [ ] Cloud SaaS control plane.
 
-## Current focus
+## Next action
 
-1. Phase 1.8 - interactive frontend over the backend surface already in
-   place (repo picker, review trigger, findings list, inline diff, history).
-2. Phase 1.9 - run the exit-criteria review on this repository with a local
-   model and record the result.
+Phase 1.8 - interactive frontend over the backend surface already in place
+(repo picker, review trigger, findings list, inline diff, history), then
+Phase 1.9 exit criteria. Narrative and rationale: `docs/SESSION_NOTES.md`.

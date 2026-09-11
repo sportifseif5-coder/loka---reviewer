@@ -55,5 +55,8 @@ Before finishing a session:
 
 - Codegraph (if installed) is the navigation tool for this codebase; its
   output directory `.codegraph/` is gitignored and never committed.
+- `make status-source` enforces that work-status markers live only in
+  `docs/PROGRESS.md`; `make progress-hint` (run by `make ci`) warns when Go
+  changes lack a `docs/PROGRESS.md` update.
 - The repo's own review tool, when it exists, must be run on this
   repository's own pull requests.

@@ -2,7 +2,8 @@
 
 > Companion to `AGENTS.md` section 2. Records what was done and what is next.
 > Updated at the end of every session. History is authoritative; this file is
-> the summary.
+> the summary. This is a narrative log only: status checkboxes live solely in
+> `docs/PROGRESS.md`.
 
 ## Session 9 - 2026-09-11: Workbench backend surface
 
@@ -43,8 +44,12 @@
   working tree.
 - Docs/tracking: new `docs/PROGRESS.md` is the living phase/task/step
   checklist (status legend + update protocol) covering Phases 0-3 and
-  post-v1. `AGENTS.md` now requires ticking it on every finished step, and
-  `docs/ROADMAP.md` points to it for live status.
+  post-v1. It is the single source of status: `make status-source`
+  (`scripts/check-status-source.sh`) fails if checklist markers appear in any
+  other Markdown file, and the advisory `make progress-hint`
+  (`scripts/progress-hint.sh`, run by `make ci`) warns when Go changes lack a
+  `docs/PROGRESS.md` update. `AGENTS.md` now requires ticking it on every
+  finished step, and `docs/ROADMAP.md` points to it for live status.
 - Quality gates: `make ci` green locally incl. the real-netns offline run and
   the desktop build.
 
