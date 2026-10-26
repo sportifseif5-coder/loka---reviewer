@@ -114,6 +114,7 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 			res.Findings[i].ID = newID()
 		}
 	}
+	res.Summary = summarize(changed, res.Findings)
 	res.FinishedAt = time.Now()
 
 	if e.store != nil {

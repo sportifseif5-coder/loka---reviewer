@@ -59,17 +59,36 @@ type ReviewRequest struct {
 	Mode     string `json:"mode"`
 }
 
+// Risk levels for a structured review summary. Derived deterministically
+// from the highest non-demoted finding severity.
+const (
+	RiskNone     = "none"
+	RiskLow      = "low"
+	RiskMedium   = "medium"
+	RiskHigh     = "high"
+	RiskCritical = "critical"
+)
+
+// ReviewSummary is a concise walkthrough of the change and its risk
+// (ADR-0006). It is computed from the ranked findings and the working-tree
+// diff; the same snapshot always produces the same summary (I3).
+type ReviewSummary struct {
+	Walkthrough string `json:"walkthrough"`
+	Risk        string `json:"risk"`
+}
+
 // ReviewResult is the full output of one review run.
 type ReviewResult struct {
-	ID           string    `json:"id"`
-	RepoPath     string    `json:"repo_path"`
-	Mode         string    `json:"mode"`
-	StartedAt    time.Time `json:"started_at"`
-	FinishedAt   time.Time `json:"finished_at"`
-	Findings     []Finding `json:"findings"`
-	AnalyzersRun []string  `json:"analyzers_run"`
-	Warnings     []string  `json:"warnings,omitempty"`
-	Degradations []string  `json:"degradations,omitempty"`
+	ID           string        `json:"id"`
+	RepoPath     string        `json:"repo_path"`
+	Mode         string        `json:"mode"`
+	StartedAt    time.Time     `json:"started_at"`
+	FinishedAt   time.Time     `json:"finished_at"`
+	Findings     []Finding     `json:"findings"`
+	Summary      ReviewSummary `json:"summary"`
+	AnalyzersRun []string      `json:"analyzers_run"`
+	Warnings     []string      `json:"warnings,omitempty"`
+	Degradations []string      `json:"degradations,omitempty"`
 }
 
 // ErrEmptyRepoPath is returned when a review is requested without a repo path.

@@ -176,6 +176,49 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+.walkthrough {
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.walkthrough p {
+  margin: 8px 0 0;
+}
+
+.risk {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border);
+}
+
+.risk-none {
+  color: var(--muted);
+}
+
+.risk-low {
+  color: var(--info);
+}
+
+.risk-medium {
+  color: var(--warning);
+}
+
+.risk-high {
+  color: var(--error);
+}
+
+.risk-critical {
+  color: var(--critical);
+}
+
 .notes {
   margin-bottom: 12px;
   padding: 10px 14px;

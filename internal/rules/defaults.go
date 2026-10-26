@@ -23,11 +23,13 @@ keeping it makes diffs noisier.
 	`---
 name: debug-print-in-go
 paths: ["**/*.go"]
+exclude: ["**/*_test.go", "cmd/**"]
 severity: warning
 pattern: "fmt\\.(Println|Printf|Print)\\(|log\\.Println\\("
 ---
 Avoid leaving debug print statements in committed code. Use the project's
-logger instead, or remove the statement.
+logger instead, or remove the statement. CLI commands and tests are excluded:
+printing is their job.
 `,
 	`---
 name: debug-print-in-js

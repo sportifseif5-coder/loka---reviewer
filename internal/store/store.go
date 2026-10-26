@@ -198,6 +198,13 @@ CREATE INDEX idx_imports_file ON index_imports(repo_path, file_path);
 	`
 CREATE INDEX idx_reviews_repo_started ON reviews(repo_path, started_at DESC, id DESC);
 `,
+	// v8: structured review summary (walkthrough + risk) on ReviewResult
+	// (ADR-0006, architecture section 4.1). Empty strings are the pre-v8
+	// default so existing rows stay readable.
+	`
+ALTER TABLE reviews ADD COLUMN walkthrough TEXT NOT NULL DEFAULT '';
+ALTER TABLE reviews ADD COLUMN risk TEXT NOT NULL DEFAULT '';
+`,
 }
 
 // migrate applies pending migrations in order, each inside a transaction.
@@ -249,12 +256,12 @@ func (s *Store) SaveReview(ctx context.Context, r *model.ReviewResult) error {
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO reviews (id, repo_path, mode, started_at, finished_at, findings_count)
-VALUES (?, ?, ?, ?, ?, ?)`,
+INSERT INTO reviews (id, repo_path, mode, started_at, finished_at, findings_count, walkthrough, risk)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ID, r.RepoPath, r.Mode,
 		r.StartedAt.UTC().Format(time.RFC3339),
 		r.FinishedAt.UTC().Format(time.RFC3339),
-		len(r.Findings)); err != nil {
+		len(r.Findings), r.Summary.Walkthrough, r.Summary.Risk); err != nil {
 		return fmt.Errorf("insert review: %w", err)
 	}
 
@@ -280,11 +287,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 func (s *Store) GetReview(ctx context.Context, id string) (*model.ReviewResult, error) {
 	var err error
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, repo_path, mode, started_at, finished_at
+SELECT id, repo_path, mode, started_at, finished_at, walkthrough, risk
 FROM reviews WHERE id = ?`, id)
 	var r model.ReviewResult
 	var started, finished string
-	if err := row.Scan(&r.ID, &r.RepoPath, &r.Mode, &started, &finished); err != nil {
+	if err := row.Scan(&r.ID, &r.RepoPath, &r.Mode, &started, &finished, &r.Summary.Walkthrough, &r.Summary.Risk); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("review %s not found", id)
 		}

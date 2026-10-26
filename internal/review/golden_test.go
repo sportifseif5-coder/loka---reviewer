@@ -94,6 +94,12 @@ func TestReviewPersistsToStore(t *testing.T) {
 	if res.ID == "" {
 		t.Fatal("review has no ID")
 	}
+	if res.Summary.Risk != model.RiskNone {
+		t.Errorf("empty repo risk = %q, want %s", res.Summary.Risk, model.RiskNone)
+	}
+	if res.Summary.Walkthrough == "" {
+		t.Fatal("empty repo produced no walkthrough")
+	}
 	loaded, err := s.GetReview(context.Background(), res.ID)
 	if err != nil {
 		t.Fatalf("GetReview: %v", err)

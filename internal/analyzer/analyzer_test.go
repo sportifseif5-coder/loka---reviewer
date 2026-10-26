@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -102,6 +103,18 @@ func TestGoVetBridgeReportsDiagnostics(t *testing.T) {
 	}
 }
 
+func TestVetTargetPrefixesModulePackages(t *testing.T) {
+	if got := vetTarget("cmd/loka"); got != "./cmd/loka" {
+		t.Errorf("vetTarget(cmd/loka) = %q, want ./cmd/loka", got)
+	}
+	if got := vetTarget("."); got != "." {
+		t.Errorf("vetTarget(.) = %q, want .", got)
+	}
+	if got := vetTarget("./internal/review"); got != "./internal/review" {
+		t.Errorf("vetTarget already-relative = %q", got)
+	}
+}
+
 func TestGoVetBridgeNoGoFiles(t *testing.T) {
 	unit := unitFor("", map[string]map[int]string{"README.md": {1: "hello"}})
 	b := GoVetBridge{}
@@ -111,6 +124,34 @@ func TestGoVetBridgeNoGoFiles(t *testing.T) {
 	}
 	if len(findings) != 0 {
 		t.Fatalf("got %d findings, want 0", len(findings))
+	}
+}
+
+func TestGoVetBridgeSkipsTaggedOutPackages(t *testing.T) {
+	fixture := filepath.Join("testdata", "taggedout")
+	unit := AnalysisUnit{
+		RepoPath: fixture,
+		Changed: []vcs.ChangedFile{
+			{Path: "main.go", Added: []vcs.AddedLine{{Number: 4, Text: `func Run() {}`}}},
+		},
+	}
+	b := GoVetBridge{}
+	findings, err := b.Analyze(context.Background(), unit)
+	if err != nil {
+		t.Fatalf("tagged-out package should not fail the lint bridge: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("tagged-out package produced findings: %+v", findings)
+	}
+}
+
+func TestExcludedByBuildTags(t *testing.T) {
+	msg := []byte("package example: build constraints exclude all Go files in /tmp/example")
+	if !excludedByBuildTags(msg, fmt.Errorf("exit status 1")) {
+		t.Fatal("expected tagged-out diagnostic to be recognized")
+	}
+	if excludedByBuildTags(nil, nil) {
+		t.Fatal("nil error is not a tagged-out skip")
 	}
 }
 

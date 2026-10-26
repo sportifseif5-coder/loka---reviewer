@@ -70,6 +70,10 @@ func TestSaveAndGetReview(t *testing.T) {
 			},
 		},
 		AnalyzersRun: []string{"example"},
+		Summary: model.ReviewSummary{
+			Walkthrough: "Reviewed 1 changed file (a.go). 1 finding: 1 error. Highest: error example-rule in a.go:3.",
+			Risk:        model.RiskHigh,
+		},
 	}
 	want.FinishedAt = time.Now().UTC()
 
@@ -92,6 +96,9 @@ func TestSaveAndGetReview(t *testing.T) {
 	}
 	if f.Location.File != "a.go" || f.Location.LineStart != 3 {
 		t.Errorf("location mismatch: %+v", f.Location)
+	}
+	if got.Summary != want.Summary {
+		t.Errorf("summary = %+v, want %+v", got.Summary, want.Summary)
 	}
 	if got.StartedAt.IsZero() || got.FinishedAt.IsZero() {
 		t.Error("timestamps not persisted")

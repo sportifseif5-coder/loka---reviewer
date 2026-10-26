@@ -23,6 +23,8 @@ type Rule struct {
 	Name string
 	// Paths are glob patterns scoping the rule; empty means all paths.
 	Paths []string
+	// Exclude are glob patterns that remove a path even if Paths match.
+	Exclude []string
 	// Severity ranks findings produced by this rule.
 	Severity model.Severity
 	// Pattern is an optional deterministic regex matched against added
@@ -33,8 +35,9 @@ type Rule struct {
 	// Source is where the rule came from (file path or "default").
 	Source string
 
-	pathRe []*regexp.Regexp
-	regex  *regexp.Regexp
+	pathRe    []*regexp.Regexp
+	excludeRe []*regexp.Regexp
+	regex     *regexp.Regexp
 }
 
 // ModelAssisted reports whether the rule needs semantic (LLM) judgment.
@@ -44,6 +47,11 @@ func (r *Rule) ModelAssisted() bool {
 
 // MatchesPath reports whether path is in scope for the rule.
 func (r *Rule) MatchesPath(path string) bool {
+	for _, re := range r.excludeRe {
+		if re.MatchString(path) {
+			return false
+		}
+	}
 	if len(r.pathRe) == 0 {
 		return true
 	}
@@ -59,6 +67,7 @@ func (r *Rule) MatchesPath(path string) bool {
 type frontMatter struct {
 	Name     string   `yaml:"name"`
 	Paths    []string `yaml:"paths"`
+	Exclude  []string `yaml:"exclude"`
 	Severity string   `yaml:"severity"`
 	Pattern  string   `yaml:"pattern"`
 }
@@ -85,6 +94,7 @@ func Parse(data []byte, source string) (*Rule, error) {
 	r := &Rule{
 		Name:     name,
 		Paths:    fm.Paths,
+		Exclude:  fm.Exclude,
 		Severity: sev,
 		Pattern:  strings.TrimSpace(fm.Pattern),
 		Message:  strings.TrimSpace(body),
@@ -97,6 +107,15 @@ func Parse(data []byte, source string) (*Rule, error) {
 				return nil, fmt.Errorf("%s: bad path %q: %w", source, p, err)
 			}
 			r.pathRe = append(r.pathRe, re)
+		}
+	}
+	if len(r.Exclude) > 0 {
+		for _, p := range r.Exclude {
+			re, err := globToRegexp(p)
+			if err != nil {
+				return nil, fmt.Errorf("%s: bad exclude %q: %w", source, p, err)
+			}
+			r.excludeRe = append(r.excludeRe, re)
 		}
 	}
 	if r.Pattern != "" {
