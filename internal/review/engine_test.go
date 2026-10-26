@@ -98,6 +98,12 @@ func TestFullPipelineFindsAndPersists(t *testing.T) {
 		t.Fatalf("missing expected findings: secret=%v debug=%v (%d findings)",
 			hasSecret, hasDebug, len(res.Findings))
 	}
+	if res.Summary.Risk != model.RiskCritical {
+		t.Errorf("summary risk = %q, want %s", res.Summary.Risk, model.RiskCritical)
+	}
+	if res.Summary.Walkthrough == "" {
+		t.Fatal("summary walkthrough is empty")
+	}
 
 	loaded, err := s.GetReview(context.Background(), res.ID)
 	if err != nil {
@@ -105,6 +111,9 @@ func TestFullPipelineFindsAndPersists(t *testing.T) {
 	}
 	if len(loaded.Findings) != len(res.Findings) {
 		t.Errorf("persisted %d findings, want %d", len(loaded.Findings), len(res.Findings))
+	}
+	if loaded.Summary != res.Summary {
+		t.Errorf("persisted summary = %+v, want %+v", loaded.Summary, res.Summary)
 	}
 }
 

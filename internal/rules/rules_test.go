@@ -214,6 +214,41 @@ func TestParseChangedFilesLineNumbers(t *testing.T) {
 	}
 }
 
+func TestExcludeGlobsSkipCLIAndTests(t *testing.T) {
+	rs := Defaults()
+	var debug *Rule
+	for _, r := range rs {
+		if r.Name == "debug-print-in-go" {
+			debug = r
+			break
+		}
+	}
+	if debug == nil {
+		t.Fatal("debug-print-in-go missing from defaults")
+	}
+	if debug.MatchesPath("cmd/loka/main.go") {
+		t.Error("CLI packages should be excluded from debug-print-in-go")
+	}
+	if debug.MatchesPath("internal/review/engine_test.go") {
+		t.Error("test files should be excluded from debug-print-in-go")
+	}
+	if !debug.MatchesPath("internal/review/engine.go") {
+		t.Error("library Go files should still match debug-print-in-go")
+	}
+
+	files := []ChangedFile{
+		{Path: "cmd/loka/main.go", Added: []AddedLine{{Number: 10, Text: `fmt.Println("review complete")`}}},
+		{Path: "internal/review/engine.go", Added: []AddedLine{{Number: 20, Text: `fmt.Println("debug")`}}},
+	}
+	findings := Evaluate(files, []*Rule{debug})
+	if len(findings) != 1 {
+		t.Fatalf("got %d findings, want 1 (library only)", len(findings))
+	}
+	if findings[0].Location.File != "internal/review/engine.go" {
+		t.Errorf("file = %q, want internal/review/engine.go", findings[0].Location.File)
+	}
+}
+
 func TestDefaultsProduceZeroNoiseOnCleanCode(t *testing.T) {
 	// Clean Go code with no console output, no conflicts, no trailing ws.
 	diff := `diff --git a/main.go b/main.go

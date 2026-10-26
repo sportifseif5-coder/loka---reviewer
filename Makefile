@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt lint status-source progress-hint golden update-golden offline ci desktop
+.PHONY: build test vet fmt lint status-source progress-hint golden update-golden offline ci desktop dogfood
 
 build:
 	go build ./...
@@ -33,5 +33,8 @@ offline:
 
 desktop:
 	go build -tags desktop -o /tmp/loka ./desktop/
+
+dogfood:
+	./scripts/dogfood.sh
 
 ci: lint test offline build desktop progress-hint

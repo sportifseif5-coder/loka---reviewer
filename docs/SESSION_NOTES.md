@@ -5,6 +5,107 @@
 > the summary. This is a narrative log only: status checkboxes live solely in
 > `docs/PROGRESS.md`.
 
+## Session 13 - 2026-10-26: Close Phase 1.1 and 1.3
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Still on
+  `feat/261025-phase-15-summary-and-19-dogfood`. Closed the remaining Phase 1
+  coding items: base-snapshot content read (1.1) and the tree-sitter
+  decision (1.3 / ADR-0007). Phase 1.9 still needs a local model for the
+  LLM half of the exit criteria.
+
+### What was built
+
+- `VCSAdapter.ReadAtHEAD`: returns HEAD blob contents, ignores working-tree
+  edits, `ErrNotInSnapshot` for untracked paths, rejects absolute/`..`
+  paths. Deleted-but-committed files remain readable.
+- Engine `fileAtBase` uses `ReadAtHEAD` for impact-pack related files and
+  falls back to the working tree only for untracked paths.
+- ADR-0007: keep `go/parser` at v1; do not add tree-sitter unless a non-Go
+  syntax tier is required (Phase 2 Python/TypeScript).
+
+### Next session
+
+1. Re-run `make dogfood` with Ollama or llama.cpp so the LLM stage runs on
+   this repository (remaining 1.9 item).
+2. Do not start Phase 2 while that exit criterion is open.
+
+## Session 12 - 2026-10-26: Phase 1.9 dogfood
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Work is on
+  `feat/261025-phase-15-summary-and-19-dogfood`, not master. Phase 1.5
+  (structured summary) shipped in this branch. Phase 1.9 dogfood ran on this
+  repository: wall-clock and noise budget pass on the deterministic baseline;
+  the local-model half is still open because nothing listens on
+  `localhost:11434` or `localhost:8080`. Remaining Phase 1 coding: 1.1
+  base-snapshot content read, 1.3 tree-sitter decision.
+
+### What was built
+
+- Shared `review.NewPipeline` so CLI and the Wails workbench both register
+  the provider router (desktop previously skipped the LLM stage even when a
+  local model was up).
+- `rules.Load` extracted from duplicated CLI/desktop loaders.
+- `go vet` bridge: prefix module packages with `./` (bare `cmd/loka` was
+  resolved as stdlib) and skip packages excluded by build tags (`desktop`).
+- Default `debug-print-in-go` excludes `cmd/**` and `*_test.go` so CLI
+  output and tests are not flagged.
+- `scripts/dogfood.sh` / `make dogfood` records wall-clock, risk, findings,
+  and degradations.
+
+### Dogfood result (this repo)
+
+- 2353ms, mode offline, risk none, 0 findings, analyzers
+  `secret-detection,go-vet,rules`.
+- Degradation: `LLM stage skipped: no provider available`.
+- I7: workbench has no apply control; engine implements no apply/merge/push.
+
+### Next session
+
+1. Re-run `make dogfood` with Ollama or llama.cpp local so the LLM stage
+   produces verified findings on this repository.
+2. Phase 1.1 base-snapshot file content read.
+3. Revisit apply-suggestion once the Phase 2 Fix Agent produces suggested
+   diffs.
+
+## Session 11 - 2026-10-25: Structured review summary
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. The workbench is interactive. This session
+  added the structured review summary (walkthrough + risk) on `ReviewResult`
+  (Phase 1.5). Remaining Phase 1 scope: the exit-criteria run (Phase 1.9),
+  the 1.1 base-snapshot content accessor, and the 1.3 tree-sitter decision.
+  Apply-suggestion stays deferred until findings carry suggested fixes
+  (Phase 2 Fix Agent).
+
+### What was built
+
+- `internal/model`: `ReviewSummary{Walkthrough, Risk}` on `ReviewResult`, with
+  named risk levels (`none` / `low` / `medium` / `high` / `critical`).
+- `internal/review/summary.go`: deterministic `summarize(changed, findings)`
+  after rank. Walkthrough covers changed-file count (paths sorted, capped at
+  3), finding counts by severity, demoted count, and the highest non-demoted
+  finding. Risk is the highest non-demoted severity; demoted-only reviews are
+  `low`; empty reviews are `none`.
+- `internal/review/engine.go`: attaches the summary before persist.
+- `internal/store`: migration v8 adds `walkthrough` and `risk` on `reviews`;
+  SaveReview/GetReview round-trip the summary.
+- CLI (`cmd/loka`) prints risk and the walkthrough; the Wails workbench
+  renders a walkthrough panel with a risk badge.
+
+### Next session
+
+1. Phase 1.9 exit criteria: run an offline review of this repository with a
+   local model, measure wall-clock and noise, and record the result. The
+   deterministic-baseline portion can run without a model.
+2. Phase 1.1 base-snapshot file content read.
+3. Revisit apply-suggestion once the Phase 2 Fix Agent produces suggested
+   diffs.
+
 ## Session 10 - 2026-09-11: Interactive workbench frontend
 
 ### State

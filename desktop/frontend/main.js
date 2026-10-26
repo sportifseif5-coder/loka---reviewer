@@ -74,6 +74,26 @@ function setSummary(text) {
   $("summary").textContent = text;
 }
 
+function setWalkthrough(review) {
+  const box = $("walkthrough");
+  if (!box) return;
+  const summary = review && review.summary;
+  const text = summary && summary.walkthrough;
+  const risk = summary && summary.risk;
+  if (!text && !risk) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  box.replaceChildren();
+  if (risk) {
+    const badge = el("span", "risk risk-" + risk, risk);
+    box.appendChild(badge);
+  }
+  if (text) box.appendChild(el("p", null, text));
+  box.hidden = false;
+}
+
 function setMode(mode) {
   const badge = $("mode");
   if (!mode) {
@@ -126,6 +146,7 @@ async function openRepo(path) {
   resetFilters();
   clearDetail();
   hideNotes();
+  setWalkthrough(null);
   renderFindings();
   try {
     setMode(await call("RepoMode", path));
@@ -186,6 +207,7 @@ function showReview(review) {
   if (review && review.mode) setMode(review.mode);
   clearDetail();
   setSummary(summaryText(review));
+  setWalkthrough(review);
   renderNotes(review);
   $("filters").hidden = state.findings.length === 0;
   renderFindings();
@@ -408,6 +430,10 @@ function mockReview(repoPath) {
     started_at: now,
     finished_at: now,
     findings: MOCK_FINDINGS,
+    summary: {
+      walkthrough: "Reviewed 3 changed files (internal/config/config.go, internal/review/engine.go, README.md). 3 findings: 1 critical, 1 error, 1 warning. Highest: critical secret-detection in internal/config/config.go:42.",
+      risk: "critical",
+    },
     analyzers_run: ["secret-detection", "go-vet", "rules"],
     warnings: [],
     degradations: ["LLM stage skipped: no local model reachable"],

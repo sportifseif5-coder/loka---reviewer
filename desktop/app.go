@@ -8,13 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/review"
-	"github.com/sportifseif5-coder/loka---reviewer/internal/rules"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/store"
-	"github.com/sportifseif5-coder/loka---reviewer/internal/vcs"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/version"
 )
 
@@ -87,17 +84,16 @@ func (a *App) Review(repoPath string) (*model.ReviewResult, error) {
 		return nil, err
 	}
 
-	eng := review.NewEngine(cfg, s)
-	eng.RegisterVCS(vcs.NewGit())
-	eng.RegisterAnalyzer(analyzer.SecretDetector{})
-	eng.RegisterAnalyzer(analyzer.GoVetBridge{})
-	rs, _ := loadRules(repoPath, cfg.Rules.Include)
-	eng.RegisterRules(rs)
-
-	return eng.Review(a.baseCtx(), model.ReviewRequest{
+	pipe := review.NewPipeline(cfg, s, repoPath)
+	res, err := pipe.Engine.Review(a.baseCtx(), model.ReviewRequest{
 		RepoPath: repoPath,
 		Mode:     string(cfg.Mode),
 	})
+	if err != nil {
+		return nil, err
+	}
+	res.Warnings = append(res.Warnings, pipe.Warnings...)
+	return res, nil
 }
 
 // ListRepos returns the repositories with stored reviews, newest first, for
@@ -152,42 +148,6 @@ func (a *App) RepoMode(repoPath string) (string, error) {
 		return "", err
 	}
 	return string(cfg.Mode), nil
-}
-
-// loadRules compiles the built-in defaults plus any rule files named in
-// rules.include, resolving entries against the repo and user config dirs.
-func loadRules(repoPath string, include []string) ([]*rules.Rule, []string) {
-	rs := rules.Defaults()
-	var warnings []string
-	for _, rel := range include {
-		candidates := []string{}
-		if repoPath != "" {
-			candidates = append(candidates, filepath.Join(repoPath, ".loka", rel))
-			candidates = append(candidates, filepath.Join(repoPath, rel))
-		}
-		if dir, err := os.UserConfigDir(); err == nil {
-			candidates = append(candidates, filepath.Join(dir, "loka", rel))
-		}
-		loaded := false
-		for _, p := range candidates {
-			data, err := os.ReadFile(p)
-			if err != nil {
-				continue
-			}
-			parsed, err := rules.ParseAll(data, p)
-			if err != nil {
-				warnings = append(warnings, "rules file "+p+": "+err.Error())
-				continue
-			}
-			rs = append(rs, parsed...)
-			loaded = true
-			break
-		}
-		if !loaded {
-			warnings = append(warnings, "rules file \""+rel+"\" not found, skipped")
-		}
-	}
-	return rs, warnings
 }
 
 // defaultDBPath resolves the per-user data directory.

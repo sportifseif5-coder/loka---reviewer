@@ -113,3 +113,40 @@ func TestLLMStageContextCarriesImpactFile(t *testing.T) {
 		t.Errorf("unexpected degradations: %v", res.Degradations)
 	}
 }
+
+func TestFileAtBasePrefersHEADOverWorkingTree(t *testing.T) {
+	repo := impactFixtureRepo(t)
+	dirty := "package e2e\n\nfunc Caller() int { return 0 } // dirty\n"
+	if err := os.WriteFile(filepath.Join(repo, "caller.go"), []byte(dirty), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	eng := NewEngine(config.Default(), nil)
+	eng.RegisterVCS(vcs.NewGit())
+	got, err := eng.fileAtBase(context.Background(), repo, "caller.go")
+	if err != nil {
+		t.Fatalf("fileAtBase: %v", err)
+	}
+	if !strings.Contains(string(got), "return Callee()") {
+		t.Errorf("HEAD content missing Callee call: %q", got)
+	}
+	if strings.Contains(string(got), "dirty") {
+		t.Fatal("fileAtBase returned working-tree content")
+	}
+}
+
+func TestFileAtBaseFallsBackForUntracked(t *testing.T) {
+	repo := impactFixtureRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, "scratch.go"), []byte("package e2e\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	eng := NewEngine(config.Default(), nil)
+	eng.RegisterVCS(vcs.NewGit())
+	got, err := eng.fileAtBase(context.Background(), repo, "scratch.go")
+	if err != nil {
+		t.Fatalf("fileAtBase untracked: %v", err)
+	}
+	if string(got) != "package e2e\n" {
+		t.Errorf("untracked fallback = %q", got)
+	}
+}

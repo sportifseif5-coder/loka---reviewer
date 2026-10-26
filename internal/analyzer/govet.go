@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -44,21 +45,45 @@ func (g GoVetBridge) Analyze(ctx context.Context, unit AnalysisUnit) ([]model.Fi
 	}
 
 	var findings []model.Finding
+	var firstErr error
+	attempted, failed := 0, 0
 	for _, d := range dirs {
-		out, err := g.vet(ctx, goBin, unit.RepoPath, d)
+		out, err := g.vet(ctx, goBin, unit.RepoPath, vetTarget(d))
 		parsed := parseVetOutput(string(out), unit.RepoPath)
-		if err != nil {
-			// Non-zero exit only counts as a successful run if it actually
-			// produced parseable diagnostics; anything else is a real failure
-			// (missing module, missing go, ...) and is recorded as a
-			// degradation so the baseline still ships.
-			if len(parsed) == 0 {
-				return nil, fmt.Errorf("go vet %s: %w", d, err)
+		if err != nil && len(parsed) == 0 {
+			// Packages excluded by build tags (e.g. //go:build desktop) are
+			// not a review failure; skip them so a tagged-out directory does
+			// not degrade the rest of the lint bridge.
+			if excludedByBuildTags(out, err) {
+				continue
 			}
+			attempted++
+			failed++
+			if firstErr == nil {
+				firstErr = fmt.Errorf("go vet %s: %w", d, err)
+			}
+			continue
 		}
+		attempted++
 		findings = append(findings, parsed...)
 	}
+	if attempted > 0 && failed == attempted && firstErr != nil {
+		return nil, firstErr
+	}
 	return findings, nil
+}
+
+// vetTarget turns a repository-relative directory into a go-tool package
+// path. Bare names like "cmd/loka" are resolved as stdlib; prefixing "./"
+// keeps the lint bridge inside this module.
+func vetTarget(dir string) string {
+	if dir == "" || dir == "." {
+		return "."
+	}
+	if filepath.IsAbs(dir) || strings.HasPrefix(dir, ".") {
+		return dir
+	}
+	return "./" + dir
 }
 
 func (g GoVetBridge) vet(ctx context.Context, goBin, repoPath, dir string) ([]byte, error) {
@@ -91,7 +116,18 @@ func changedGoDirs(changed []vcs.ChangedFile) []string {
 	for d := range set {
 		dirs = append(dirs, d)
 	}
+	sort.Strings(dirs)
 	return dirs
+}
+
+// excludedByBuildTags reports whether go vet failed only because every file
+// in the package is tagged out of the default build.
+func excludedByBuildTags(out []byte, err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := string(out) + err.Error()
+	return strings.Contains(msg, "build constraints exclude all Go files")
 }
 
 // parseVetOutput turns `path/file.go:LINE:COL: message` lines into findings.

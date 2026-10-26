@@ -12,3 +12,4 @@ never by editing history (see constitution section 10.2).
 | [0004](0004-lightweight-graph-index.md) | Lightweight graph index, no embeddings at v1 | Accepted |
 | [0005](0005-local-storage.md) | SQLite + plain-file local storage | Accepted |
 | [0006](0006-finding-model.md) | Evidence-linked findings model | Accepted |
+| [0007](0007-go-parser-over-tree-sitter.md) | Pure-Go parser at v1, not tree-sitter | Accepted |

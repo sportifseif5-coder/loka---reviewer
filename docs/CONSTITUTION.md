@@ -155,6 +155,7 @@ Formal ADRs live in `docs/adr/`. Current binding decisions:
 | ADR-0004 | **Lightweight graph index** (symbol/type/import graph, no embeddings at v1) | Cross-file context with low resource cost; embeddings deferred as an optional enhancement. |
 | ADR-0005 | Storage in **SQLite + plain files** | Open, portable, user-owned. Index/learnings/history all local. Invariant I5. |
 | ADR-0006 | Review output model = **findings + evidence**, rendered as inline comments in the desktop UI and (later) on Git platforms | Aligns with explainability (value 5) and human-in-the-loop (value 6). |
+| ADR-0007 | **Pure-Go `go/parser` at v1**, not tree-sitter | No native runtime; indexer already parses Go offline. Revisit only for a non-Go syntax tier. |
 
 ## 8. Execution Modes
 
