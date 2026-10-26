@@ -5,6 +5,32 @@
 > the summary. This is a narrative log only: status checkboxes live solely in
 > `docs/PROGRESS.md`.
 
+## Session 13 - 2026-10-26: Close Phase 1.1 and 1.3
+
+### State
+
+- Phase: **Phase 1 (Offline MVP)**. Still on
+  `feat/261025-phase-15-summary-and-19-dogfood`. Closed the remaining Phase 1
+  coding items: base-snapshot content read (1.1) and the tree-sitter
+  decision (1.3 / ADR-0007). Phase 1.9 still needs a local model for the
+  LLM half of the exit criteria.
+
+### What was built
+
+- `VCSAdapter.ReadAtHEAD`: returns HEAD blob contents, ignores working-tree
+  edits, `ErrNotInSnapshot` for untracked paths, rejects absolute/`..`
+  paths. Deleted-but-committed files remain readable.
+- Engine `fileAtBase` uses `ReadAtHEAD` for impact-pack related files and
+  falls back to the working tree only for untracked paths.
+- ADR-0007: keep `go/parser` at v1; do not add tree-sitter unless a non-Go
+  syntax tier is required (Phase 2 Python/TypeScript).
+
+### Next session
+
+1. Re-run `make dogfood` with Ollama or llama.cpp so the LLM stage runs on
+   this repository (remaining 1.9 item).
+2. Do not start Phase 2 while that exit criterion is open.
+
 ## Session 12 - 2026-10-26: Phase 1.9 dogfood
 
 ### State

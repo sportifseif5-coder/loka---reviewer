@@ -10,7 +10,7 @@
 > log. `make status-source` enforces the split so status cannot drift into
 > prose copies elsewhere.
 
-**Last updated:** 2026-10-26 (Session 12)
+**Last updated:** 2026-10-26 (Session 13)
 
 ## Legend and update protocol
 
@@ -53,8 +53,8 @@ budget on this repo; `[x]` applied fixes only on explicit user action.
 - [x] `IsRepo` and working-tree diff vs HEAD (added lines, file statuses,
       untracked files as synthetic all-additions diffs).
 - [x] Per-line `Blame` (commit + author).
-- [ ] Base-snapshot file content read (today the diff-vs-HEAD is the
-      snapshot; no separate content accessor).
+- [x] Base-snapshot file content read (`VCSAdapter.ReadAtHEAD`; impact
+      context prefers HEAD over the working tree).
 
 ### 1.2 Indexer (lightweight graph index)
 
@@ -69,8 +69,9 @@ budget on this repo; `[x]` applied fixes only on explicit user action.
 
 - [x] Secret detection with bundled patterns (evidence redacted).
 - [x] Go lint bridge (`go vet`) scoped to changed Go directories.
-- [ ] tree-sitter syntax checks - `[~]` replaced at v1 by pure-Go `go/parser`
-      parsing in the indexer; revisit if a non-Go syntax tier is needed.
+- [~] tree-sitter syntax checks - replaced at v1 by pure-Go `go/parser`
+      in the indexer (ADR-0007, 2026-10-26); revisit if a non-Go syntax
+      tier is needed.
 
 ### 1.4 Rules engine
 
@@ -166,6 +167,5 @@ Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` full v1 scope passes all inv
 ## Next action
 
 Re-run Phase 1.9 with a reachable local model (Ollama or llama.cpp) so the
-LLM stage is exercised on this repository. Remaining Phase 1 coding items:
-1.1 (base-snapshot content read) and the 1.3 tree-sitter decision. Narrative:
-`docs/SESSION_NOTES.md`.
+LLM stage is exercised on this repository. Phase 1 coding items 1.1 and 1.3
+are closed. Narrative: `docs/SESSION_NOTES.md`.

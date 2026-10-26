@@ -192,13 +192,29 @@ func (e *Engine) impactContext(ctx context.Context, unit analyzer.AnalysisUnit, 
 		if im.Distance == 0 {
 			continue // the changed files themselves are already in the diff
 		}
-		data, err := os.ReadFile(filepath.Join(unit.RepoPath, im.Path))
+		data, err := e.fileAtBase(ctx, unit.RepoPath, im.Path)
 		if err != nil {
 			continue // a related file may have moved between index and read
 		}
 		out = append(out, agent.ContextFile{Path: im.Path, Distance: im.Distance, Code: string(data)})
 	}
 	return out
+}
+
+// fileAtBase returns the base-snapshot (HEAD) contents of rel. Untracked
+// files fall back to the working tree so newly added related files still
+// reach the context pack. Without a VCS adapter the working tree is used.
+func (e *Engine) fileAtBase(ctx context.Context, repoPath, rel string) ([]byte, error) {
+	if e.vcs != nil {
+		data, err := e.vcs.ReadAtHEAD(ctx, repoPath, rel)
+		if err == nil {
+			return data, nil
+		}
+		if err != vcs.ErrNotInSnapshot && err != vcs.ErrNotRepository {
+			return nil, err
+		}
+	}
+	return os.ReadFile(filepath.Join(repoPath, rel))
 }
 
 // collectDiff populates the changed-file slice from the VCS adapter,

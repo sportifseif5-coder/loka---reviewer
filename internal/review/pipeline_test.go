@@ -62,7 +62,7 @@ func TestNewPipelineRunsFixtureRepo(t *testing.T) {
 
 func TestEngineHasNoWorkingTreeMutators(t *testing.T) {
 	// Invariant I7: the engine never writes the working tree. The VCS
-	// adapter surface is read-only (IsRepo, WorkingDiff, Blame). Apply of
+	// adapter surface is read-only (IsRepo, WorkingDiff, Blame, ReadAtHEAD). Apply of
 	// suggested fixes is deferred until Phase 2; this package must not grow
 	// an apply/merge/push helper in the meantime.
 	var e Engine

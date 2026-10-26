@@ -159,6 +159,76 @@ func TestWorkingDiffNotARepo(t *testing.T) {
 	}
 }
 
+func TestReadAtHEADReturnsCommittedContent(t *testing.T) {
+	ctx := context.Background()
+	repo := buildRepo(t, func(dir string) {
+		p := filepath.Join(dir, "README.md")
+		if err := os.WriteFile(p, []byte("# working tree\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	g := NewGit()
+	got, err := g.ReadAtHEAD(ctx, repo, "README.md")
+	if err != nil {
+		t.Fatalf("ReadAtHEAD: %v", err)
+	}
+	if string(got) != "# baseline\n" {
+		t.Errorf("ReadAtHEAD = %q, want committed baseline", got)
+	}
+}
+
+func TestReadAtHEADUntracked(t *testing.T) {
+	ctx := context.Background()
+	repo := buildRepo(t, func(dir string) {
+		if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("untracked\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	g := NewGit()
+	_, err := g.ReadAtHEAD(ctx, repo, "new.txt")
+	if err != ErrNotInSnapshot {
+		t.Fatalf("err = %v, want ErrNotInSnapshot", err)
+	}
+}
+
+func TestReadAtHEADDeletedStillReadable(t *testing.T) {
+	ctx := context.Background()
+	repo := buildRepo(t, func(dir string) {
+		if err := os.Remove(filepath.Join(dir, "main.go")); err != nil {
+			t.Fatal(err)
+		}
+	})
+	g := NewGit()
+	got, err := g.ReadAtHEAD(ctx, repo, "main.go")
+	if err != nil {
+		t.Fatalf("ReadAtHEAD deleted file: %v", err)
+	}
+	if !contains(string(got), "package main") {
+		t.Errorf("deleted file HEAD content missing: %q", got)
+	}
+}
+
+func TestReadAtHEADRejectsEscape(t *testing.T) {
+	ctx := context.Background()
+	repo := buildRepo(t, nil)
+	g := NewGit()
+	if _, err := g.ReadAtHEAD(ctx, repo, "../outside.go"); err == nil {
+		t.Fatal("escaped path must be rejected")
+	}
+	if _, err := g.ReadAtHEAD(ctx, repo, "/etc/passwd"); err == nil {
+		t.Fatal("absolute path must be rejected")
+	}
+}
+
+func TestReadAtHEADNotARepo(t *testing.T) {
+	ctx := context.Background()
+	g := NewGit()
+	_, err := g.ReadAtHEAD(ctx, t.TempDir(), "README.md")
+	if err != ErrNotRepository {
+		t.Fatalf("err = %v, want ErrNotRepository", err)
+	}
+}
+
 func TestBlame(t *testing.T) {
 	ctx := context.Background()
 	repo := buildRepo(t, func(dir string) {

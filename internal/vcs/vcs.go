@@ -40,6 +40,10 @@ type Diff struct {
 // work tree.
 var ErrNotRepository = errors.New("not a git repository")
 
+// ErrNotInSnapshot is returned when a path has no content at HEAD
+// (untracked, or never committed).
+var ErrNotInSnapshot = errors.New("path is not in the base snapshot")
+
 // AddedLine is one added line in the working-tree diff.
 type AddedLine struct {
 	Number int
@@ -62,4 +66,8 @@ type VCSAdapter interface {
 	WorkingDiff(ctx context.Context, path string) (*Diff, error)
 	// Blame returns (commit, author) for a single line of a file.
 	Blame(ctx context.Context, path, file string, line int) (commit, author string, err error)
+	// ReadAtHEAD returns the file contents at HEAD (the base snapshot).
+	// Untracked paths return ErrNotInSnapshot. Deleted-but-committed paths
+	// still return the HEAD blob. The read is strictly read-only (I7).
+	ReadAtHEAD(ctx context.Context, path, file string) ([]byte, error)
 }

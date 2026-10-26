@@ -173,6 +173,37 @@ func syntheticAddedDiff(dir, file string) string {
 	return b.String()
 }
 
+// ReadAtHEAD returns the contents of file as committed at HEAD. Working-tree
+// edits are ignored. Untracked files return ErrNotInSnapshot. Paths that
+// escape the repository are rejected.
+func (g *Git) ReadAtHEAD(ctx context.Context, path, file string) ([]byte, error) {
+	if !g.IsRepo(ctx, path) {
+		return nil, ErrNotRepository
+	}
+	if err := rejectUnsafePath(file); err != nil {
+		return nil, err
+	}
+	out, err := g.run(ctx, path, "show", "HEAD:"+file)
+	if err != nil {
+		return nil, ErrNotInSnapshot
+	}
+	return out, nil
+}
+
+func rejectUnsafePath(file string) error {
+	if file == "" {
+		return fmt.Errorf("empty path")
+	}
+	if filepath.IsAbs(file) {
+		return fmt.Errorf("absolute path %q", file)
+	}
+	cleaned := filepath.Clean(file)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path %q escapes the repository", file)
+	}
+	return nil
+}
+
 // Blame returns the commit and author of the commit that last touched a line.
 func (g *Git) Blame(ctx context.Context, path, file string, line int) (commit, author string, err error) {
 	arg := strconv.Itoa(line) + "," + strconv.Itoa(line)
