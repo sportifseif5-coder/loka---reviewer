@@ -10,7 +10,7 @@
 > log. `make status-source` enforces the split so status cannot drift into
 > prose copies elsewhere.
 
-**Last updated:** 2026-10-26 (Session 13)
+**Last updated:** 2026-11-01 (Session 14)
 
 ## Legend and update protocol
 
@@ -129,13 +129,22 @@ budget on this repo; `[x]` applied fixes only on explicit user action.
       apply/merge/push methods (I7). Apply stays deferred until Phase 2 Fix
       Agent.
 
-## Phase 2 - Online and Agent Mode - NOT STARTED
+## Phase 2 - Online and Agent Mode - IN PROGRESS
 
 Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` online review uses user keys with auditability;
 `[ ]` agent mode cites external sources; `[ ]` learnings measurably reduce
 repeated dismissed categories.
 
-- [ ] Remote OpenAI-compatible providers with BYO keys via the OS keyring.
+Phase 1 is not closed. Session 14 started Phase 2 at the user's request
+while 1.9's local-model half is still `[~]`. Return playbook:
+`docs/PHASE_1_9_RETURN.md`. Do not mark Phase 1 complete from this work.
+
+- [~] Remote OpenAI-compatible providers with BYO keys via the OS keyring.
+      (2026-11-01) `internal/secrets`: memory store, 0600 file store under
+      `$XDG_CONFIG_HOME/loka/secrets`, `Resolve` (keyring then env).
+      Config `api_key_keyring: service/account`; OpenAI-compatible providers
+      read keys through that store. Native Secret Service / macOS Keychain
+      still open. Env fallback remains `api_key_env` (never `MCAI_*`).
 - [ ] Failover/degradation UX (remote down -> local -> baseline banner).
 - [ ] Agent mode: web search/fetch agents with per-repo consent and egress
       log.
@@ -166,6 +175,12 @@ Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` full v1 scope passes all inv
 
 ## Next action
 
-Re-run Phase 1.9 with a reachable local model (Ollama or llama.cpp) so the
-LLM stage is exercised on this repository. Phase 1 coding items 1.1 and 1.3
-are closed. Narrative: `docs/SESSION_NOTES.md`.
+**Must return to Phase 1.9** before calling Phase 1 complete. Follow
+`docs/PHASE_1_9_RETURN.md`: start Ollama (`:11434`) or llama.cpp (`:8080`),
+re-run `make dogfood`, prove `analyzers_run` contains `llm:<model>`, then
+tick the 1.9 local-model line. This environment could not load a model
+(cgroup RAM ~300 MiB, no swap, no runtime installed).
+
+Meanwhile Phase 2 continues: native OS keyring (Secret Service / Keychain)
+or the next Phase 2 item (failover/degradation UX banner). Narrative:
+`docs/SESSION_NOTES.md`.

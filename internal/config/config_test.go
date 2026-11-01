@@ -168,6 +168,37 @@ func TestLoadForRepoInheritance(t *testing.T) {
 	}
 }
 
+func TestParseAPIKeyKeyring(t *testing.T) {
+	data := []byte(`
+providers:
+  - name: openai
+    model: gpt-4o
+    api_key_keyring: loka/openai
+    api_key_env: USER_LLM_API_KEY
+`)
+	cfg, warnings, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", warnings)
+	}
+	if cfg.Providers[0].APIKeyKeyring != "loka/openai" {
+		t.Errorf("api_key_keyring = %q, want loka/openai", cfg.Providers[0].APIKeyKeyring)
+	}
+	if cfg.Providers[0].APIKeyEnv != "USER_LLM_API_KEY" {
+		t.Errorf("api_key_env = %q", cfg.Providers[0].APIKeyEnv)
+	}
+}
+
+func TestValidateRejectsBadKeyringRef(t *testing.T) {
+	cfg := Default()
+	cfg.Providers = []Provider{{Name: "openai", Model: "m", APIKeyKeyring: "nslash"}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error for keyring ref without slash")
+	}
+}
+
 func TestProviderIsLocal(t *testing.T) {
 	local := true
 	remote := false

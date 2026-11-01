@@ -32,11 +32,12 @@ func (m Mode) Valid() bool {
 
 // Provider describes one LLM backend in the provider layer.
 type Provider struct {
-	Name      string `yaml:"name"`
-	Model     string `yaml:"model"`
-	Local     *bool  `yaml:"local"`
-	BaseURL   string `yaml:"base_url"`
-	APIKeyEnv string `yaml:"api_key_env"`
+	Name          string `yaml:"name"`
+	Model         string `yaml:"model"`
+	Local         *bool  `yaml:"local"`
+	BaseURL       string `yaml:"base_url"`
+	APIKeyEnv     string `yaml:"api_key_env"`
+	APIKeyKeyring string `yaml:"api_key_keyring"`
 }
 
 // IsLocal reports whether the provider is treated as local. A provider is
@@ -131,6 +132,12 @@ func (c *Config) Validate() error {
 		if p.APIKeyEnv != "" && strings.HasPrefix(strings.TrimSpace(p.APIKeyEnv), "MCAI_") {
 			return fmt.Errorf("providers[%d].api_key_env references a reserved environment name", i)
 		}
+		if ref := strings.TrimSpace(p.APIKeyKeyring); ref != "" {
+			slash := strings.IndexByte(ref, '/')
+			if slash <= 0 || slash == len(ref)-1 {
+				return fmt.Errorf("providers[%d].api_key_keyring must be service/account", i)
+			}
+		}
 	}
 	return nil
 }
@@ -173,7 +180,7 @@ var (
 		"mode": true, "providers": true, "budgets": true, "rules": true,
 	}
 	knownProvider = map[string]bool{
-		"name": true, "model": true, "local": true, "base_url": true, "api_key_env": true,
+		"name": true, "model": true, "local": true, "base_url": true, "api_key_env": true, "api_key_keyring": true,
 	}
 	knownBudgets = map[string]bool{
 		"review_tokens": true, "agent_timeout_sec": true,

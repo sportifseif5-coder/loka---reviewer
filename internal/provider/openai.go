@@ -2,9 +2,9 @@ package provider
 
 import (
 	"context"
-	"os"
 
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/secrets"
 )
 
 // OpenAICompatible is a provider for any OpenAI-compatible endpoint. It may
@@ -20,13 +20,24 @@ type OpenAICompatible struct {
 }
 
 // NewOpenAICompatible builds a provider from a config entry. The API key is
-// read from the configured environment variable at construction time; an
-// empty key means the endpoint needs no authentication.
+// resolved from the OS/file keyring when api_key_keyring is set, otherwise
+// from the configured environment variable. An empty key means the endpoint
+// needs no authentication. Keys are never logged (constitution 10.5).
 func NewOpenAICompatible(p config.Provider) *OpenAICompatible {
-	key := ""
-	if p.APIKeyEnv != "" {
-		key = os.Getenv(p.APIKeyEnv)
+	return NewOpenAICompatibleWithStore(p, secrets.DefaultStore())
+}
+
+// NewOpenAICompatibleWithStore is the testable constructor: the secret store
+// is injected so CI never needs a real keyring.
+func NewOpenAICompatibleWithStore(p config.Provider, store secrets.Store) *OpenAICompatible {
+	lookup := secrets.Lookup{EnvVar: p.APIKeyEnv}
+	if p.APIKeyKeyring != "" {
+		if svc, acct, err := secrets.ParseKeyringRef(p.APIKeyKeyring); err == nil {
+			lookup.Service = svc
+			lookup.Account = acct
+		}
 	}
+	key, _, _ := secrets.Resolve(context.Background(), store, lookup)
 	return &OpenAICompatible{
 		name:    p.Name,
 		model:   p.Model,

@@ -5,6 +5,54 @@
 > the summary. This is a narrative log only: status checkboxes live solely in
 > `docs/PROGRESS.md`.
 
+## Session 14 - 2026-11-01: Start Phase 2; park Phase 1.9
+
+### State
+
+- Phase 1 Offline MVP is **not closed**. The user asked to start Phase 2
+  anyway and to write down every incomplete 1.9 item so a later session can
+  finish it. Work moved to `feat/261101-phase-2-keyring`.
+- Return playbook (authoritative for the parked work):
+  `docs/PHASE_1_9_RETURN.md`.
+
+### Phase 1.9 leftovers (must finish later)
+
+Do not tick Phase 1 complete until all of this is done:
+
+1. A real local model must be reachable: Ollama on `localhost:11434` or
+   llama.cpp on `localhost:8080`. Fixtures do not count.
+2. `GET /v1/models` on that endpoint must return a status below 500.
+3. `make dogfood` on this repository must finish under 60s **and**
+   `analyzers_run` must include `llm:<model>`. The 2026-10-26 run (2353ms,
+   0 findings, degradation `LLM stage skipped: no provider available`) does
+   not satisfy this.
+4. Record whether any LLM finding survived added-line verification. Zero
+   survivors is fine only if the model actually ran.
+5. Update `docs/PROGRESS.md` 1.9 and the Phase 1 exit-criteria line from
+   the dogfood JSON evidence.
+
+Why Session 14 could not close it: no `ollama`/`llama.cpp` binary, both
+ports refused, cgroup memory about 300 MiB, no swap. Do not fake a model.
+
+Already done for 1.9 (do not redo): shared `review.NewPipeline`,
+`scripts/dogfood.sh`, noise budget 0 findings, I7 no apply/merge/push,
+1.1 `ReadAtHEAD`, 1.3 ADR-0007.
+
+### What was built (Phase 2.1 start)
+
+- `internal/secrets`: `Store` interface, memory store, 0600 file store,
+  `Resolve` (keyring then env), `ParseKeyringRef`.
+- Config: `api_key_keyring: service/account` (validated), known-key walk.
+- OpenAI-compatible provider reads keys via `secrets.DefaultStore()`
+  (`$XDG_CONFIG_HOME/loka/secrets`) with env fallback. Injected store for
+  tests. Native OS keyring still open.
+
+### Next session
+
+1. Finish Phase 1.9 per `docs/PHASE_1_9_RETURN.md` when a local model can
+   run (raise memory / install Ollama or llama.cpp).
+2. Continue Phase 2: native keyring, or failover/degradation UX banner.
+
 ## Session 13 - 2026-10-26: Close Phase 1.1 and 1.3
 
 ### State

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/secrets"
 )
 
 // stubProvider is a controllable fake for routing tests. It never opens a
@@ -220,5 +221,36 @@ func TestFromConfig(t *testing.T) {
 
 	if _, err := FromConfig(config.Provider{Name: "nope", Model: "m"}); err == nil {
 		t.Errorf("unknown provider should error")
+	}
+}
+
+func TestOpenAICompatiblePrefersKeyring(t *testing.T) {
+	mem := secrets.NewMemoryStore()
+	if err := mem.Set(context.Background(), "loka", "openai", "sk-ring"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("USER_LLM_API_KEY", "sk-env")
+	p := NewOpenAICompatibleWithStore(config.Provider{
+		Name:          "openai",
+		Model:         "m",
+		APIKeyEnv:     "USER_LLM_API_KEY",
+		APIKeyKeyring: "loka/openai",
+		BaseURL:       "http://example.invalid/v1",
+	}, mem)
+	if p.c.key != "sk-ring" {
+		t.Fatalf("key = %q, want sk-ring", p.c.key)
+	}
+}
+
+func TestOpenAICompatibleFallsBackToEnv(t *testing.T) {
+	t.Setenv("USER_LLM_API_KEY", "sk-env")
+	p := NewOpenAICompatibleWithStore(config.Provider{
+		Name:      "openai",
+		Model:     "m",
+		APIKeyEnv: "USER_LLM_API_KEY",
+		BaseURL:   "http://example.invalid/v1",
+	}, secrets.NewMemoryStore())
+	if p.c.key != "sk-env" {
+		t.Fatalf("key = %q, want sk-env", p.c.key)
 	}
 }
