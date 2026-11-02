@@ -62,6 +62,52 @@ func TestRouterFailover(t *testing.T) {
 	}
 }
 
+func TestRouterCompleteTracedLocalDownUsesRemote(t *testing.T) {
+	local := stubProvider{name: "local", local: true, avail: false}
+	remote := stubProvider{name: "remote", local: false, avail: true, response: "from-remote"}
+	r := NewRouter()
+	r.Add(local)
+	r.Add(remote)
+
+	res, trace, err := r.CompleteTraced(context.Background(), Request{Prompt: "p"}, false)
+	if err != nil {
+		t.Fatalf("CompleteTraced: %v", err)
+	}
+	if res.Content != "from-remote" {
+		t.Errorf("content = %q, want remote after local down", res.Content)
+	}
+	if trace.Used != "remote" {
+		t.Errorf("used = %q, want remote", trace.Used)
+	}
+	if trace.Banner != BannerRemoteAfterLocal {
+		t.Errorf("banner = %q, want %q", trace.Banner, BannerRemoteAfterLocal)
+	}
+	if !containsStep(trace.Skipped, "local") {
+		t.Errorf("skipped = %v, want local listed", trace.Skipped)
+	}
+}
+
+func TestRouterCompleteTracedBaselineWhenNone(t *testing.T) {
+	r := NewRouter()
+	r.Add(stubProvider{name: "remote", local: false, avail: false})
+	_, trace, err := r.CompleteTraced(context.Background(), Request{Prompt: "p"}, false)
+	if !errors.Is(err, ErrNoProvider) {
+		t.Fatalf("err = %v, want ErrNoProvider", err)
+	}
+	if trace.Banner != BannerBaseline {
+		t.Errorf("banner = %q, want %q", trace.Banner, BannerBaseline)
+	}
+}
+
+func containsStep(steps []string, name string) bool {
+	for _, s := range steps {
+		if s == name {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRouterOfflineExcludesRemote(t *testing.T) {
 	remote := stubProvider{name: "remote", local: false, avail: true, response: "from-remote"}
 	r := NewRouter()

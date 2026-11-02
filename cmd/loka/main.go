@@ -99,11 +99,17 @@ func runReview(args []string) {
 
 	fmt.Printf("review %s complete: %d findings (mode %s, %d analyzers, risk %s)\n",
 		res.ID, len(res.Findings), res.Mode, len(res.AnalyzersRun), res.Summary.Risk)
+	if res.Banner != "" {
+		fmt.Fprintf(os.Stderr, "banner: %s\n", res.Banner)
+	}
 	if res.Summary.Walkthrough != "" {
 		fmt.Println(res.Summary.Walkthrough)
 	}
 	for _, d := range res.Degradations {
 		fmt.Fprintf(os.Stderr, "degradation: %s\n", d)
+	}
+	for _, e := range res.Egress {
+		fmt.Fprintf(os.Stderr, "egress: %s\n", e)
 	}
 }
 

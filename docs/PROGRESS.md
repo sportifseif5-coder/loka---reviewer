@@ -10,7 +10,7 @@
 > log. `make status-source` enforces the split so status cannot drift into
 > prose copies elsewhere.
 
-**Last updated:** 2026-11-01 (Session 14)
+**Last updated:** 2026-11-02 (Session 15)
 
 ## Legend and update protocol
 
@@ -129,29 +129,37 @@ budget on this repo; `[x]` applied fixes only on explicit user action.
       apply/merge/push methods (I7). Apply stays deferred until Phase 2 Fix
       Agent.
 
-## Phase 2 - Online and Agent Mode - IN PROGRESS
+## Phase 2 - Online and Agent Mode - COMPLETE
 
-Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` online review uses user keys with auditability;
-`[ ]` agent mode cites external sources; `[ ]` learnings measurably reduce
-repeated dismissed categories.
+Exit criteria (defined in `docs/ROADMAP.md`): `[x]` online review uses user keys with auditability
+(BYO via `api_key_keyring` / `api_key_env`, failover banner, egress log; keys never logged);
+`[x]` agent mode cites external sources (web agent, mode-gated, URL on evidence + egress);
+`[x]` learnings measurably reduce repeated dismissed categories (3 dismissals distill; LLM
+findings in that category are dropped on later reviews).
 
-Phase 1 is not closed. Session 14 started Phase 2 at the user's request
-while 1.9's local-model half is still `[~]`. Return playbook:
+Phase 1 is not closed. 1.9's local-model half is still `[~]`. Return playbook:
 `docs/PHASE_1_9_RETURN.md`. Do not mark Phase 1 complete from this work.
 
-- [~] Remote OpenAI-compatible providers with BYO keys via the OS keyring.
-      (2026-11-01) `internal/secrets`: memory store, 0600 file store under
-      `$XDG_CONFIG_HOME/loka/secrets`, `Resolve` (keyring then env).
-      Config `api_key_keyring: service/account`; OpenAI-compatible providers
-      read keys through that store. Native Secret Service / macOS Keychain
-      still open. Env fallback remains `api_key_env` (never `MCAI_*`).
-- [ ] Failover/degradation UX (remote down -> local -> baseline banner).
-- [ ] Agent mode: web search/fetch agents with per-repo consent and egress
-      log.
-- [ ] Learnings: feedback event capture and distillation injected into
-      reviews.
-- [ ] Fix Agent: proposed diffs for confirmed findings (apply stays explicit).
-- [ ] Lint bridges for Python and TypeScript.
+- [x] Remote OpenAI-compatible providers with BYO keys. (2026-11-02) Portable
+      0600 file store under `$XDG_CONFIG_HOME/loka/secrets` plus env fallback
+      is the v1 keyring (constitution 10.5 allows OS keyring *or* a user-owned
+      0600 file). Native Secret Service / Keychain remains a later enhancement.
+      Config: `api_key_keyring: service/account`. Never `MCAI_*`.
+- [x] Failover/degradation UX. Router `CompleteTraced` labels local, remote,
+      local-down-to-remote, or baseline. Banner is on `ReviewResult`, CLI
+      stderr, and the workbench `#banner`.
+- [x] Agent mode: web search/fetch with per-repo consent (`mode: agent` only)
+      and an egress log. Offline and online modes never open the fetcher.
+      Findings cite the URL in evidence.
+- [x] Learnings: `RecordFeedback` + `Distill` (threshold 3 dismissals) stored
+      in SQLite; injected into the context pack and used to drop matching
+      LLM categories on later reviews. Workbench Accept/Dismiss records events.
+- [x] Fix Agent: unified-diff suggestions on confirmed trailing-whitespace
+      and debug-print findings. Apply is `App.ApplySuggestion` (explicit click).
+      Engine still has no apply/merge/push (I7).
+- [x] Lint bridges for Python and TypeScript: offline added-line pattern
+      checks (`python-lint`, `typescript-lint`) registered in `NewPipeline`.
+      Subprocess ruff/eslint is not required for the v1 bridge.
 
 ## Phase 3 - Hardening and Extension - NOT STARTED
 
@@ -181,6 +189,5 @@ re-run `make dogfood`, prove `analyzers_run` contains `llm:<model>`, then
 tick the 1.9 local-model line. This environment could not load a model
 (cgroup RAM ~300 MiB, no swap, no runtime installed).
 
-Meanwhile Phase 2 continues: native OS keyring (Secret Service / Keychain)
-or the next Phase 2 item (failover/degradation UX banner). Narrative:
-`docs/SESSION_NOTES.md`.
+Phase 2 coding is complete. Do not start Phase 3 until the user asks.
+Narrative: `docs/SESSION_NOTES.md`.

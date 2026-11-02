@@ -51,6 +51,9 @@ type Finding struct {
 	// not confirm against the added lines. Demoted findings are kept (never
 	// silently deleted) but capped at info severity and ranked last.
 	Demoted bool `json:"demoted,omitempty"`
+	// SuggestedFix is a unified-diff suggestion from the Fix Agent. Applying
+	// it is always an explicit user action (invariant I7).
+	SuggestedFix string `json:"suggested_fix,omitempty"`
 }
 
 // ReviewRequest asks the engine to review a repository.
@@ -89,6 +92,36 @@ type ReviewResult struct {
 	AnalyzersRun []string      `json:"analyzers_run"`
 	Warnings     []string      `json:"warnings,omitempty"`
 	Degradations []string      `json:"degradations,omitempty"`
+	// Banner is the failover label (local / remote-after-local / baseline).
+	Banner string `json:"banner,omitempty"`
+	// Egress lists network targets touched during the review (empty in
+	// offline mode). Used for the agent-mode audit log (I6).
+	Egress []string `json:"egress,omitempty"`
+}
+
+// Feedback actions recorded for the learnings loop.
+const (
+	FeedbackAccept  = "accept"
+	FeedbackDismiss = "dismiss"
+	FeedbackApply   = "apply"
+)
+
+// FeedbackEvent is one user decision on a finding.
+type FeedbackEvent struct {
+	RepoPath  string    `json:"repo_path"`
+	FindingID string    `json:"finding_id,omitempty"`
+	Category  string    `json:"category"`
+	Action    string    `json:"action"`
+	At        time.Time `json:"at"`
+}
+
+// Learning is a distilled preference injected into later reviews.
+type Learning struct {
+	RepoPath string  `json:"repo_path"`
+	Category string  `json:"category"`
+	Body     string  `json:"body"`
+	Source   string  `json:"source"`
+	Weight   float64 `json:"weight"`
 }
 
 // ErrEmptyRepoPath is returned when a review is requested without a repo path.

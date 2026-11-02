@@ -104,7 +104,15 @@ func (e *Engine) Review(ctx context.Context, req model.ReviewRequest) (*model.Re
 	// deterministic baseline still ships (ADR-0003 routing policy, I2/I3).
 	res.Findings = baseline
 	if llm := e.llmStage(ctx, unit, baseline, res); len(llm) > 0 {
-		res.Findings = append(res.Findings, llm...)
+		res.Findings = append(res.Findings, e.filterLearned(ctx, unit.RepoPath, llm)...)
+	}
+	if web := e.webStage(ctx, unit, res); len(web) > 0 {
+		res.Findings = append(res.Findings, web...)
+	}
+	res.Findings = agent.NewFixAgent().Propose(res.Findings, changed)
+
+	if res.Banner == "" {
+		res.Banner = provider.BannerBaseline
 	}
 
 	res.Findings = dedupe(res.Findings)
@@ -137,13 +145,20 @@ func (e *Engine) llmStage(ctx context.Context, unit analyzer.AnalysisUnit, basel
 
 	localOnly := e.cfg.Mode == config.ModeOffline
 	ar, err := agent.NewReviewAgent().Run(ctx, e.router, localOnly, agent.Request{
-		RepoPath: unit.RepoPath,
-		Changed:  unit.Changed,
-		Baseline: baseline,
-		Relevant: e.impactContext(ctx, unit, res),
-		Budget:   e.cfg.Budgets.ReviewTokens,
+		RepoPath:  unit.RepoPath,
+		Changed:   unit.Changed,
+		Baseline:  baseline,
+		Relevant:  e.impactContext(ctx, unit, res),
+		Learnings: e.learnings(ctx, unit.RepoPath),
+		Budget:    e.cfg.Budgets.ReviewTokens,
 	})
+	if ar != nil && ar.Banner != "" && res.Banner == "" {
+		res.Banner = ar.Banner
+	}
 	if err != nil {
+		if res.Banner == "" {
+			res.Banner = provider.BannerBaseline
+		}
 		res.Degradations = append(res.Degradations,
 			fmt.Sprintf("LLM stage skipped: %v", err))
 		return nil
@@ -158,6 +173,58 @@ func (e *Engine) llmStage(ctx context.Context, unit analyzer.AnalysisUnit, basel
 	}
 	res.AnalyzersRun = append(res.AnalyzersRun, "llm:"+ar.Model)
 	return ar.Findings
+}
+
+func (e *Engine) learnings(ctx context.Context, repoPath string) []model.Learning {
+	if e.store == nil {
+		return nil
+	}
+	ls, err := e.store.ListLearnings(ctx, repoPath)
+	if err != nil {
+		return nil
+	}
+	return ls
+}
+
+func (e *Engine) filterLearned(ctx context.Context, repoPath string, findings []model.Finding) []model.Finding {
+	ls := e.learnings(ctx, repoPath)
+	if len(ls) == 0 {
+		return findings
+	}
+	skip := map[string]bool{}
+	for _, l := range ls {
+		if l.Category != "" {
+			skip[l.Category] = true
+		}
+	}
+	out := make([]model.Finding, 0, len(findings))
+	for _, f := range findings {
+		key := f.RuleID
+		if key == "" {
+			key = f.Category
+		}
+		if skip[key] || skip[f.Category] {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+func (e *Engine) webStage(ctx context.Context, unit analyzer.AnalysisUnit, res *model.ReviewResult) []model.Finding {
+	if e.cfg.Mode != config.ModeAgent {
+		return nil
+	}
+	out, err := agent.NewWebAgent(nil).Run(ctx, agent.WebRequest{Mode: e.cfg.Mode, Changed: unit.Changed})
+	if err != nil {
+		res.Degradations = append(res.Degradations, fmt.Sprintf("web agent skipped: %v", err))
+		return nil
+	}
+	res.Egress = append(res.Egress, out.Egress...)
+	if len(out.Findings) > 0 {
+		res.AnalyzersRun = append(res.AnalyzersRun, "web")
+	}
+	return out.Findings
 }
 
 // impactContext feeds the graph-index impact slice into the context pack

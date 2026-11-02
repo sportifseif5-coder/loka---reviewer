@@ -39,6 +39,8 @@ type Request struct {
 	// Relevant carries the impact-slice files' code beyond the diff, ordered
 	// by distance then path (see packContext).
 	Relevant []ContextFile
+	// Learnings are distilled user preferences injected into the pack.
+	Learnings []model.Learning
 	// Budget bounds context plus completion tokens for the pass. Zero means
 	// DefaultBudget.
 	Budget int
@@ -53,6 +55,8 @@ type Result struct {
 	Invalid int
 	// Demoted counts candidates the verification agent could not confirm.
 	Demoted int
+	// Banner is the provider failover label (local / remote-after-local / baseline).
+	Banner string
 }
 
 // Agent is the agent-layer role interface.

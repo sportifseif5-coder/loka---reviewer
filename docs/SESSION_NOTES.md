@@ -5,6 +5,35 @@
 > the summary. This is a narrative log only: status checkboxes live solely in
 > `docs/PROGRESS.md`.
 
+## Session 15 - 2026-11-02: Finish Phase 2 coding
+
+### State
+
+- Phase 2 coding is complete on `feat/261101-phase-2-keyring`. Phase 1 is
+  still not closed: 1.9 local-model dogfood remains parked
+  (`docs/PHASE_1_9_RETURN.md`). Do not start Phase 3 unless asked.
+
+### What was built
+
+- Router `CompleteTraced` plus `ReviewResult.Banner` (local / remote after
+  local / baseline). CLI prints `banner:`; workbench shows `#banner`.
+- Agent-mode web agent: capability-scoped sink lookup, mode-gated, egress
+  log, URL cited on evidence. Offline and online modes are no-ops.
+- Learnings: SQLite v9 `feedback_events`, distill at 3 dismissals, inject
+  into the context pack, drop matching LLM categories. Workbench
+  Accept/Dismiss.
+- Fix Agent: unified-diff suggestions; apply only via explicit
+  `App.ApplySuggestion` (I7). Engine has no mutators.
+- Python and TypeScript offline lint bridges in `NewPipeline`.
+- BYO keys remain the 0600 file store + env (Session 14). Native OS
+  keyring is deferred; constitution allows the file store.
+
+### Next session
+
+1. Finish Phase 1.9 per `docs/PHASE_1_9_RETURN.md` when a local model can
+   run.
+2. Do not start Phase 3 unless asked.
+
 ## Session 14 - 2026-11-01: Start Phase 2; park Phase 1.9
 
 ### State

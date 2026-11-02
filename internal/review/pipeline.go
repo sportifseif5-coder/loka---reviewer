@@ -28,6 +28,8 @@ func NewPipeline(cfg *config.Config, s *store.Store, repoPath string) *Pipeline 
 	eng.RegisterVCS(vcs.NewGit())
 	eng.RegisterAnalyzer(analyzer.SecretDetector{})
 	eng.RegisterAnalyzer(analyzer.GoVetBridge{})
+	eng.RegisterAnalyzer(analyzer.PythonLint{})
+	eng.RegisterAnalyzer(analyzer.TypeScriptLint{})
 
 	rs, warnings := rules.Load(repoPath, cfg.Rules.Include)
 	eng.RegisterRules(rs)

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/vcs"
 )
 
@@ -26,9 +27,10 @@ Output only the JSON array, no prose, no markdown fences.`
 // ordered by distance from the change. Oversized packs are truncated from the
 // tail (the least relevant impact code first), never the baseline.
 const (
-	baselineHeader = "Deterministic baseline findings:\n"
-	diffHeader     = "Changed files (added lines):\n"
-	relevantHeader = "Related code (files impacted by the change):\n"
+	baselineHeader  = "Deterministic baseline findings:\n"
+	learningsHeader = "User learnings (do not re-raise dismissed categories):\n"
+	diffHeader      = "Changed files (added lines):\n"
+	relevantHeader  = "Related code (files impacted by the change):\n"
 )
 
 // packContext assembles the token-budgeted context pack handed to the model:
@@ -54,6 +56,9 @@ func packContext(req Request, contextBudget int) string {
 	if !emit(&b, &remaining, "\n") {
 		truncated = true
 	}
+	if !emitLearnings(&b, &remaining, req.Learnings) {
+		truncated = true
+	}
 	if !emitDiff(&b, &remaining, req.Changed) {
 		truncated = true
 	}
@@ -74,6 +79,22 @@ func emit(b *strings.Builder, remaining *int, s string) bool {
 	}
 	b.WriteString(s)
 	*remaining -= t
+	return true
+}
+
+func emitLearnings(b *strings.Builder, remaining *int, learnings []model.Learning) bool {
+	if len(learnings) == 0 {
+		return true
+	}
+	if !emit(b, remaining, learningsHeader) {
+		return false
+	}
+	for _, l := range learnings {
+		line := fmt.Sprintf("- [%s] %s\n", l.Category, l.Body)
+		if !emit(b, remaining, line) {
+			return false
+		}
+	}
 	return true
 }
 

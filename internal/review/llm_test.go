@@ -208,4 +208,65 @@ func TestLLMStageFailureDegradesAndKeepsBaseline(t *testing.T) {
 	if secrets < 1 || debug < 1 {
 		t.Errorf("baseline lost on LLM failure: secret=%d debug=%d", secrets, debug)
 	}
+	if res.Banner != provider.BannerBaseline {
+		t.Errorf("banner = %q, want baseline", res.Banner)
+	}
+}
+
+func TestLearningsDropDismissedLLMCategory(t *testing.T) {
+	repo := fixtureRepo(t)
+	cfg := config.Default()
+	s, err := store.Open("")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		if err := s.RecordFeedback(ctx, model.FeedbackEvent{
+			RepoPath: repo,
+			Category: "llm",
+			Action:   model.FeedbackDismiss,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Distill(ctx, repo); err != nil {
+		t.Fatal(err)
+	}
+
+	eng := NewEngine(cfg, s)
+	eng.RegisterVCS(vcs.NewGit())
+	eng.RegisterProviderRouter(fixtureAgentRouter(false, `[{"file":"app.go","line":7,"severity":"warning",
+		"message":"println swallows errors","reasoning":"use fmt.Fprintf to a writer"}]`))
+
+	res, err := eng.Review(ctx, model.ReviewRequest{RepoPath: repo})
+	if err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	for _, f := range res.Findings {
+		if f.Source == model.SourceLLM {
+			t.Errorf("dismissed LLM category still present: %+v", f)
+		}
+	}
+}
+
+func TestWebStageOnlyInAgentMode(t *testing.T) {
+	repo := fixtureRepo(t)
+	cfg := config.Default()
+	s, err := store.Open("")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	eng := NewEngine(cfg, s)
+	eng.RegisterVCS(vcs.NewGit())
+	res, err := eng.Review(context.Background(), model.ReviewRequest{RepoPath: repo})
+	if err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	if len(res.Egress) != 0 {
+		t.Errorf("offline review opened egress: %v", res.Egress)
+	}
 }

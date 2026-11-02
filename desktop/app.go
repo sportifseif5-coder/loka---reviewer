@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sportifseif5-coder/loka---reviewer/internal/agent"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/review"
@@ -148,6 +149,35 @@ func (a *App) RepoMode(repoPath string) (string, error) {
 		return "", err
 	}
 	return string(cfg.Mode), nil
+}
+
+// RecordFeedback stores an accept/dismiss/apply event and distills learnings.
+func (a *App) RecordFeedback(repoPath, findingID, category, action string) error {
+	if repoPath == "" || action == "" {
+		return fmt.Errorf("feedback requires repo path and action")
+	}
+	s, err := a.ready()
+	if err != nil {
+		return err
+	}
+	if err := s.RecordFeedback(a.baseCtx(), model.FeedbackEvent{
+		RepoPath:  repoPath,
+		FindingID: findingID,
+		Category:  category,
+		Action:    action,
+	}); err != nil {
+		return err
+	}
+	_, err = s.Distill(a.baseCtx(), repoPath)
+	return err
+}
+
+// ApplySuggestion writes a Fix Agent patch after an explicit user click (I7).
+func (a *App) ApplySuggestion(repoPath, file, patch string) error {
+	if repoPath == "" || file == "" || patch == "" {
+		return fmt.Errorf("apply requires repo, file, and patch")
+	}
+	return agent.ApplySuggestion(repoPath, file, patch)
 }
 
 // defaultDBPath resolves the per-user data directory.

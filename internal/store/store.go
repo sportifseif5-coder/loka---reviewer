@@ -205,6 +205,24 @@ CREATE INDEX idx_reviews_repo_started ON reviews(repo_path, started_at DESC, id 
 ALTER TABLE reviews ADD COLUMN walkthrough TEXT NOT NULL DEFAULT '';
 ALTER TABLE reviews ADD COLUMN risk TEXT NOT NULL DEFAULT '';
 `,
+	// v9: Phase 2 learnings, failover banner, egress log, suggested fixes.
+	`
+ALTER TABLE reviews ADD COLUMN banner TEXT NOT NULL DEFAULT '';
+ALTER TABLE reviews ADD COLUMN egress TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE findings ADD COLUMN suggested_fix TEXT NOT NULL DEFAULT '';
+ALTER TABLE learnings ADD COLUMN repo_path TEXT NOT NULL DEFAULT '';
+ALTER TABLE learnings ADD COLUMN category TEXT NOT NULL DEFAULT '';
+CREATE TABLE feedback_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_path  TEXT NOT NULL,
+    finding_id TEXT NOT NULL DEFAULT '',
+    category   TEXT NOT NULL,
+    action     TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX idx_feedback_repo ON feedback_events(repo_path, category, action);
+CREATE INDEX idx_learnings_repo ON learnings(repo_path, category);
+`,
 }
 
 // migrate applies pending migrations in order, each inside a transaction.
@@ -255,13 +273,17 @@ func (s *Store) SaveReview(ctx context.Context, r *model.ReviewResult) error {
 	}
 	defer tx.Rollback()
 
+	egress, err := json.Marshal(r.Egress)
+	if err != nil {
+		return fmt.Errorf("marshal egress: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO reviews (id, repo_path, mode, started_at, finished_at, findings_count, walkthrough, risk)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT INTO reviews (id, repo_path, mode, started_at, finished_at, findings_count, walkthrough, risk, banner, egress)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ID, r.RepoPath, r.Mode,
 		r.StartedAt.UTC().Format(time.RFC3339),
 		r.FinishedAt.UTC().Format(time.RFC3339),
-		len(r.Findings), r.Summary.Walkthrough, r.Summary.Risk); err != nil {
+		len(r.Findings), r.Summary.Walkthrough, r.Summary.Risk, r.Banner, string(egress)); err != nil {
 		return fmt.Errorf("insert review: %w", err)
 	}
 
@@ -272,11 +294,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO findings
-    (id, review_id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence, demoted)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (id, review_id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence, demoted, suggested_fix)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			f.ID, r.ID, f.RuleID, f.Category, string(f.Severity), string(f.Source),
 			f.Location.File, nullableInt(f.Location.LineStart), nullableInt(f.Location.LineEnd),
-			f.Message, f.Reasoning, f.Confidence, string(evidence), boolInt(f.Demoted)); err != nil {
+			f.Message, f.Reasoning, f.Confidence, string(evidence), boolInt(f.Demoted), f.SuggestedFix); err != nil {
 			return fmt.Errorf("insert finding: %w", err)
 		}
 	}
@@ -287,11 +309,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 func (s *Store) GetReview(ctx context.Context, id string) (*model.ReviewResult, error) {
 	var err error
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, repo_path, mode, started_at, finished_at, walkthrough, risk
+SELECT id, repo_path, mode, started_at, finished_at, walkthrough, risk, banner, egress
 FROM reviews WHERE id = ?`, id)
 	var r model.ReviewResult
-	var started, finished string
-	if err := row.Scan(&r.ID, &r.RepoPath, &r.Mode, &started, &finished, &r.Summary.Walkthrough, &r.Summary.Risk); err != nil {
+	var started, finished, egress string
+	if err := row.Scan(&r.ID, &r.RepoPath, &r.Mode, &started, &finished, &r.Summary.Walkthrough, &r.Summary.Risk, &r.Banner, &egress); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("review %s not found", id)
 		}
@@ -303,9 +325,14 @@ FROM reviews WHERE id = ?`, id)
 	if r.FinishedAt, err = time.Parse(time.RFC3339, finished); err != nil {
 		return nil, err
 	}
+	if egress != "" && egress != "[]" {
+		if err := json.Unmarshal([]byte(egress), &r.Egress); err != nil {
+			return nil, fmt.Errorf("unmarshal egress: %w", err)
+		}
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence, demoted
+SELECT id, rule_id, category, severity, source, file_path, line_start, line_end, message, reasoning, confidence, evidence, demoted, suggested_fix
 FROM findings WHERE review_id = ? ORDER BY file_path, line_start`, id)
 	if err != nil {
 		return nil, err
@@ -318,7 +345,7 @@ FROM findings WHERE review_id = ? ORDER BY file_path, line_start`, id)
 		var evidence string
 		var demoted int
 		if err := rows.Scan(&f.ID, &f.RuleID, &f.Category, &sev, &src, &f.Location.File,
-			&lineStart, &lineEnd, &f.Message, &f.Reasoning, &f.Confidence, &evidence, &demoted); err != nil {
+			&lineStart, &lineEnd, &f.Message, &f.Reasoning, &f.Confidence, &evidence, &demoted, &f.SuggestedFix); err != nil {
 			return nil, err
 		}
 		f.Severity = model.Severity(sev)
@@ -435,4 +462,120 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// RecordFeedback stores one user decision on a finding (accept/dismiss/apply).
+func (s *Store) RecordFeedback(ctx context.Context, ev model.FeedbackEvent) error {
+	if ev.RepoPath == "" || ev.Action == "" {
+		return fmt.Errorf("feedback requires repo_path and action")
+	}
+	at := ev.At
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO feedback_events (repo_path, finding_id, category, action, created_at)
+VALUES (?, ?, ?, ?, ?)`,
+		ev.RepoPath, ev.FindingID, ev.Category, ev.Action, at.UTC().Format(time.RFC3339))
+	return err
+}
+
+// ListFeedback returns recorded events for a repository, oldest first.
+func (s *Store) ListFeedback(ctx context.Context, repoPath string) ([]model.FeedbackEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT repo_path, finding_id, category, action, created_at
+FROM feedback_events WHERE repo_path = ? ORDER BY id`, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.FeedbackEvent
+	for rows.Next() {
+		var ev model.FeedbackEvent
+		var at string
+		if err := rows.Scan(&ev.RepoPath, &ev.FindingID, &ev.Category, &ev.Action, &at); err != nil {
+			return nil, err
+		}
+		if ev.At, err = time.Parse(time.RFC3339, at); err != nil {
+			return nil, err
+		}
+		out = append(out, ev)
+	}
+	return out, rows.Err()
+}
+
+const distillThreshold = 3
+
+// Distill turns repeated dismissals into durable learnings for a repository.
+// Returns the number of learnings upserted.
+func (s *Store) Distill(ctx context.Context, repoPath string) (int, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT category, COUNT(*) FROM feedback_events
+WHERE repo_path = ? AND action = ? AND category != ''
+GROUP BY category`, repoPath, model.FeedbackDismiss)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	type agg struct {
+		category string
+		n        int
+	}
+	var aggs []agg
+	for rows.Next() {
+		var a agg
+		if err := rows.Scan(&a.category, &a.n); err != nil {
+			return 0, err
+		}
+		aggs = append(aggs, a)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	n := 0
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, a := range aggs {
+		if a.n < distillThreshold {
+			continue
+		}
+		body := fmt.Sprintf("user repeatedly dismisses category %s in this repository", a.category)
+		res, err := s.db.ExecContext(ctx, `
+UPDATE learnings SET body = ?, weight = ?, created_at = ?
+WHERE repo_path = ? AND category = ?`,
+			body, float64(a.n), now, repoPath, a.category)
+		if err != nil {
+			return n, err
+		}
+		affected, _ := res.RowsAffected()
+		if affected == 0 {
+			if _, err := s.db.ExecContext(ctx, `
+INSERT INTO learnings (body, source, weight, created_at, repo_path, category)
+VALUES (?, 'feedback', ?, ?, ?, ?)`,
+				body, float64(a.n), now, repoPath, a.category); err != nil {
+				return n, err
+			}
+		}
+		n++
+	}
+	return n, nil
+}
+
+// ListLearnings returns distilled preferences for a repository.
+func (s *Store) ListLearnings(ctx context.Context, repoPath string) ([]model.Learning, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT repo_path, category, body, source, weight
+FROM learnings WHERE repo_path = ? ORDER BY category`, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.Learning
+	for rows.Next() {
+		var l model.Learning
+		if err := rows.Scan(&l.RepoPath, &l.Category, &l.Body, &l.Source, &l.Weight); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
 }

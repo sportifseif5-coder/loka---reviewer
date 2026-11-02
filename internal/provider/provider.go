@@ -51,6 +51,24 @@ type Provider interface {
 	Complete(ctx context.Context, req Request) (Result, error)
 }
 
+// Failover banners label the local -> remote -> baseline path (ADR-0003
+// prefers local; architecture 3.3 degrades instead of failing the review).
+const (
+	BannerNone             = ""
+	BannerLocal            = "using local provider"
+	BannerRemote           = "using remote provider"
+	BannerRemoteAfterLocal = "local down; failed over to remote"
+	BannerBaseline         = "no LLM available; deterministic baseline only"
+)
+
+// Trace records which providers were skipped and which one served a request
+// so the workbench can show a failover banner without leaking keys.
+type Trace struct {
+	Used    string
+	Skipped []string
+	Banner  string
+}
+
 // ErrNoProvider is returned when no eligible provider could serve a request.
 // Callers treat it as "LLM skipped" and deliver the deterministic baseline.
 var ErrNoProvider = errors.New("no provider available")
@@ -79,23 +97,42 @@ func (r *Router) Len() int { return len(r.providers) }
 // Complete routes a request. With localOnly (offline mode) remote providers
 // are never consulted. Local providers are always tried before remote ones.
 func (r *Router) Complete(ctx context.Context, req Request, localOnly bool) (Result, error) {
+	res, _, err := r.CompleteTraced(ctx, req, localOnly)
+	return res, err
+}
+
+// CompleteTraced is Complete plus a failover trace for the degradation banner.
+func (r *Router) CompleteTraced(ctx context.Context, req Request, localOnly bool) (Result, Trace, error) {
+	trace := Trace{Banner: BannerBaseline}
 	for _, p := range r.providers {
-		if p.Local() {
-			if res, ok := tryOne(ctx, p, req); ok {
-				return res, nil
-			}
+		if !p.Local() {
+			continue
 		}
+		if res, ok := tryOne(ctx, p, req); ok {
+			trace.Used = p.Name()
+			trace.Banner = BannerLocal
+			return res, trace, nil
+		}
+		trace.Skipped = append(trace.Skipped, p.Name())
 	}
 	if !localOnly {
 		for _, p := range r.providers {
-			if !p.Local() {
-				if res, ok := tryOne(ctx, p, req); ok {
-					return res, nil
-				}
+			if p.Local() {
+				continue
 			}
+			if res, ok := tryOne(ctx, p, req); ok {
+				trace.Used = p.Name()
+				if len(trace.Skipped) > 0 {
+					trace.Banner = BannerRemoteAfterLocal
+				} else {
+					trace.Banner = BannerRemote
+				}
+				return res, trace, nil
+			}
+			trace.Skipped = append(trace.Skipped, p.Name())
 		}
 	}
-	return Result{}, ErrNoProvider
+	return Result{}, trace, ErrNoProvider
 }
 
 func tryOne(ctx context.Context, p Provider, req Request) (Result, bool) {

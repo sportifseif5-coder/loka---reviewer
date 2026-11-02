@@ -147,6 +147,7 @@ async function openRepo(path) {
   clearDetail();
   hideNotes();
   setWalkthrough(null);
+  setBanner(null);
   renderFindings();
   try {
     setMode(await call("RepoMode", path));
@@ -208,9 +209,23 @@ function showReview(review) {
   clearDetail();
   setSummary(summaryText(review));
   setWalkthrough(review);
+  setBanner(review);
   renderNotes(review);
   $("filters").hidden = state.findings.length === 0;
   renderFindings();
+}
+
+function setBanner(review) {
+  const box = $("banner");
+  if (!box) return;
+  const text = review && review.banner;
+  if (!text) {
+    box.hidden = true;
+    box.textContent = "";
+    return;
+  }
+  box.textContent = text;
+  box.hidden = false;
 }
 
 function summaryText(review) {
@@ -307,6 +322,34 @@ async function selectFinding(finding) {
     for (const item of finding.evidence) list.appendChild(el("li", null, item));
     detail.appendChild(list);
   }
+  const actions = el("div", "finding-actions");
+  const accept = el("button", null, "Accept");
+  accept.type = "button";
+  accept.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    recordFeedback(finding, "accept");
+  });
+  const dismiss = el("button", null, "Dismiss");
+  dismiss.type = "button";
+  dismiss.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    recordFeedback(finding, "dismiss");
+  });
+  actions.appendChild(accept);
+  actions.appendChild(dismiss);
+  if (finding.suggested_fix) {
+    const pre = el("pre", "patch", finding.suggested_fix);
+    detail.appendChild(el("strong", null, "Suggested fix"));
+    detail.appendChild(pre);
+    const apply = el("button", "primary", "Apply suggestion");
+    apply.type = "button";
+    apply.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      applySuggestion(finding);
+    });
+    actions.appendChild(apply);
+  }
+  detail.appendChild(actions);
   if (!loc.file) return;
   const code = el("div", "code");
   code.appendChild(el("p", "muted", "Loading context..."));
@@ -379,6 +422,26 @@ function renderHistory() {
   }
 }
 
+async function recordFeedback(finding, action) {
+  try {
+    await call("RecordFeedback", state.repo, finding.id || "", finding.rule_id || finding.category || "", action);
+    setSummary("Recorded " + action + " for " + (finding.rule_id || finding.category || "finding") + ".");
+  } catch (err) {
+    setSummary("Error: " + err);
+  }
+}
+
+async function applySuggestion(finding) {
+  const loc = finding.location || {};
+  try {
+    await call("ApplySuggestion", state.repo, loc.file, finding.suggested_fix);
+    await recordFeedback(finding, "apply");
+    setSummary("Applied suggestion to " + (loc.file || "file") + ".");
+  } catch (err) {
+    setSummary("Error: " + err);
+  }
+}
+
 const MOCK_FINDINGS = [
   {
     id: "f1",
@@ -434,9 +497,10 @@ function mockReview(repoPath) {
       walkthrough: "Reviewed 3 changed files (internal/config/config.go, internal/review/engine.go, README.md). 3 findings: 1 critical, 1 error, 1 warning. Highest: critical secret-detection in internal/config/config.go:42.",
       risk: "critical",
     },
-    analyzers_run: ["secret-detection", "go-vet", "rules"],
+    analyzers_run: ["secret-detection", "go-vet", "python-lint", "typescript-lint", "rules"],
     warnings: [],
     degradations: ["LLM stage skipped: no local model reachable"],
+    banner: "no LLM available; deterministic baseline only",
   };
 }
 

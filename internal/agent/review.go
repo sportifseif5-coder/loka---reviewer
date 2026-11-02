@@ -28,22 +28,22 @@ func (a *ReviewAgent) Name() string { return "review" }
 // deterministic baseline.
 func (a *ReviewAgent) Run(ctx context.Context, router *provider.Router, localOnly bool, req Request) (*Result, error) {
 	if router == nil || router.Len() == 0 {
-		return nil, provider.ErrNoProvider
+		return &Result{Banner: provider.BannerBaseline}, provider.ErrNoProvider
 	}
 	contextBudget, outputBudget := splitBudget(req.Budget)
 	prompt := packContext(req, contextBudget)
 
-	result, err := router.Complete(ctx, provider.Request{
+	result, trace, err := router.CompleteTraced(ctx, provider.Request{
 		System:      SystemPrompt,
 		Prompt:      prompt,
 		MaxTokens:   outputBudget,
 		Temperature: 0.2,
 	}, localOnly)
 	if err != nil {
-		return nil, err
+		return &Result{Banner: trace.Banner}, err
 	}
 
-	out := &Result{Model: result.Model, Usage: result.Usage}
+	out := &Result{Model: result.Model, Usage: result.Usage, Banner: trace.Banner}
 	candidates, invalid, err := parseFindings(result.Content)
 	if err != nil {
 		return nil, err

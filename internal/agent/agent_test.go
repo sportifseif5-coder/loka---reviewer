@@ -92,6 +92,20 @@ func TestPackContextIncludesBaselineAndAddedLines(t *testing.T) {
 	}
 }
 
+func TestPackContextIncludesLearnings(t *testing.T) {
+	req := Request{
+		Changed: sampleChanged(),
+		Learnings: []model.Learning{{
+			Category: "debug-print-in-go",
+			Body:     "user repeatedly dismisses category debug-print-in-go in this repository",
+		}},
+	}
+	ctx := packContext(req, 4096)
+	if !strings.Contains(ctx, "User learnings") || !strings.Contains(ctx, "debug-print-in-go") {
+		t.Errorf("learnings missing from context:\n%s", ctx)
+	}
+}
+
 func TestPackContextTruncatesByBudgetNotBaseline(t *testing.T) {
 	req := Request{
 		Changed: sampleChanged(),
