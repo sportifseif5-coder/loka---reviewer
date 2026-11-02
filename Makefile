@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt lint status-source progress-hint golden update-golden offline ci desktop dogfood
+.PHONY: build test vet fmt lint status-source progress-hint golden update-golden offline ci desktop dogfood local-model-install local-model-start local-model-status local-model-pull
 
 build:
 	go build ./...
@@ -36,5 +36,19 @@ desktop:
 
 dogfood:
 	./scripts/dogfood.sh
+
+# Phase 1.9 local-model environment. install/start/status never pull weights.
+# local-model-pull is the later step that downloads the model.
+local-model-install:
+	./scripts/local-model-install.sh
+
+local-model-start:
+	./scripts/local-model-start.sh
+
+local-model-status:
+	./scripts/local-model-status.sh
+
+local-model-pull:
+	./scripts/local-model-pull.sh
 
 ci: lint test offline build desktop progress-hint

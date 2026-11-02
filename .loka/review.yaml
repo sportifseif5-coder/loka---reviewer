@@ -1,0 +1,16 @@
+# Repository-local review config for Phase 1.9 dogfood.
+# Offline-only: the local Ollama runtime is used when it is up.
+# Model weights are not in this repository; drop them in later with
+# `make local-model-pull` (or `ollama pull <model>`).
+mode: offline
+providers:
+  - name: ollama
+    model: qwen2.5-coder:7b
+    local: true
+    base_url: http://127.0.0.1:11434
+budgets:
+  review_tokens: 12000
+  agent_timeout_sec: 90
+rules:
+  include:
+    - review_rules.md

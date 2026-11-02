@@ -114,6 +114,11 @@
 *.pem
 *.key
 
+# Local model weights (Phase 1.9). Runtime config in .loka/review.yaml is tracked.
+**/*.gguf
+**/*.gguf.sha256
+.loka/models/
+
 # Temporary files
 *.tmp
 *.temp

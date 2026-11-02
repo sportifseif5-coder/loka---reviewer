@@ -25,12 +25,39 @@ Nothing was listening on `localhost:11434` (Ollama) or `localhost:8080`
 (llama.cpp). The deterministic baseline already meets the wall-clock budget;
 the local-model half does not.
 
+## What is already prepared (Session 16, 2026-11-02)
+
+Runtime scaffolding is in place so a later session only has to drop in
+weights. **This does not close 1.9.** Fixtures still do not count.
+
+- Repo config: `.loka/review.yaml` (offline, `ollama` / `qwen2.5-coder:7b`,
+  `http://127.0.0.1:11434`).
+- Scripts (no pull except the last one):
+  - `make local-model-install` — Ollama binary only
+  - `make local-model-start` — `ollama serve` on `:11434`
+  - `make local-model-status` — ping `/v1/models`; exit 2 if weights missing
+  - `make local-model-pull` — **later** `ollama pull` of the configured model
+- Weights are gitignored (`*.gguf`, `.loka/models/`).
+
+When the model is added:
+
+```
+make local-model-start
+make local-model-pull
+make local-model-status
+make dogfood
+```
+
+Status must print `status=ready`. Dogfood must show `llm:<model>` in
+`analyzers_run` and must **not** say `LLM stage skipped: no provider available`.
+
 ## What is incomplete (do all of this)
 
 1. **Reachable local model.** Start Ollama (`:11434`) or llama.cpp server
-   (`:8080`) on the same machine as the review. Default config already
-   registers `ollama` / `qwen2.5-coder:7b`. A different local model is fine
-   if `providers` in `.loka/review.yaml` or user config names it.
+   (`:8080`) on the same machine as the review. Default and repo config
+   register `ollama` / `qwen2.5-coder:7b`. A different local model is fine
+   if `providers` in `.loka/review.yaml` or user config names it. Use
+   `make local-model-start` then `make local-model-pull` when adding weights.
 2. **Confirm ping.** Loka treats the provider as available when
    `GET {baseURL}/v1/models` returns any status below 500 (see
    `internal/provider/client.go`). Check that before reviewing:
@@ -88,10 +115,13 @@ Recorded so the return session does not waste time rediscovering this:
 - Cgroup `memory.current` was about 300 MiB with almost no headroom.
   A 7B (or even 1B) GGUF cannot load here without raising the memory
   limit.
-- `ollama` and `llama.cpp` binaries were not installed.
-- `curl` to `:11434` and `:8080` failed immediately (connection refused).
+- Session 16 installed the Ollama **binary** and can start an empty
+  server on `:11434` (`make local-model-start`). `/v1/models` returns
+  HTTP 200 with an empty list. Weights are still absent; status is
+  `waiting-for-weights`. llama.cpp is not installed.
 - Do not fake a model with a fixture provider and tick 1.9. Fixtures are
-  the CI harness (I4). 1.9 requires a real local runtime.
+  the CI harness (I4). 1.9 requires a real local runtime **and** a loaded
+  model that completes a review.
 
 If the return session is in the same constrained environment: raise the
 cgroup memory limit and/or run Ollama/llama.cpp on the host, then point
@@ -125,9 +155,11 @@ replayed."
 ## Suggested return session order
 
 1. Confirm memory is enough to load a small local model.
-2. Start Ollama or llama.cpp; pass the `/v1/models` ping.
-3. `make dogfood` from the repo root on a `feat/*` branch.
-4. Inspect `$TMPDIR/loka-dogfood.json` for `analyzers_run` and
+2. `make local-model-start` (binary already installed if Session 16 ran).
+3. `make local-model-pull` to add weights; `make local-model-status` must
+   print `status=ready`.
+4. `make dogfood` from the repo root on a `feat/*` branch.
+5. Inspect `$TMPDIR/loka-dogfood.json` for `analyzers_run` and
    degradations.
-5. Update `docs/PROGRESS.md` and `docs/SESSION_NOTES.md`.
-6. Conventional commit; push the `feat/*` branch (not `master`).
+6. Update `docs/PROGRESS.md` and `docs/SESSION_NOTES.md`.
+7. Conventional commit; push the `feat/*` branch (not `master`).

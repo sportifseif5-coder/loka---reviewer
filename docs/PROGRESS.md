@@ -10,7 +10,7 @@
 > log. `make status-source` enforces the split so status cannot drift into
 > prose copies elsewhere.
 
-**Last updated:** 2026-11-02 (Session 15)
+**Last updated:** 2026-11-02 (Session 16)
 
 ## Legend and update protocol
 
@@ -118,8 +118,10 @@ budget on this repo; `[x]` applied fixes only on explicit user action.
 - [~] Offline review with a local model in < 60s. (2026-10-26) `make dogfood`
       ran this repository in 2353ms (31 changed files, risk none, 0 findings,
       analyzers secret-detection/go-vet/rules). LLM stage skipped: no Ollama
-      on :11434 and no llama.cpp on :8080. Re-run when a local model is
-      reachable; the deterministic path already meets the wall-clock budget.
+      on :11434 and no llama.cpp on :8080. (2026-11-02) Runtime prep only:
+      `.loka/review.yaml`, `make local-model-{install,start,status,pull}`.
+      Weights are not installed; do not tick this line until `make dogfood`
+      shows `llm:<model>` in `analyzers_run`. Playbook: `docs/PHASE_1_9_RETURN.md`.
 - [x] False-positive rate within the noise budget. Dogfood of this working
       tree produced 0 findings after excluding CLI/tests from
       `debug-print-in-go` and skipping tagged-out `go vet` packages. Corpus
@@ -183,11 +185,11 @@ Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` full v1 scope passes all inv
 
 ## Next action
 
-**Must return to Phase 1.9** before calling Phase 1 complete. Follow
-`docs/PHASE_1_9_RETURN.md`: start Ollama (`:11434`) or llama.cpp (`:8080`),
-re-run `make dogfood`, prove `analyzers_run` contains `llm:<model>`, then
-tick the 1.9 local-model line. This environment could not load a model
-(cgroup RAM ~300 MiB, no swap, no runtime installed).
+**Must return to Phase 1.9** before calling Phase 1 complete. Runtime is
+prepared (install/start/status); weights are not. When adding the model:
+`make local-model-start && make local-model-pull && make local-model-status && make dogfood`.
+Prove `analyzers_run` contains `llm:<model>`, then tick the 1.9 local-model
+line. Playbook: `docs/PHASE_1_9_RETURN.md`.
 
 Phase 2 coding is complete. Do not start Phase 3 until the user asks.
 Narrative: `docs/SESSION_NOTES.md`.

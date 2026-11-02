@@ -5,6 +5,29 @@
 > the summary. This is a narrative log only: status checkboxes live solely in
 > `docs/PROGRESS.md`.
 
+## Session 16 - 2026-11-02: Prepare local-model environment (no weights)
+
+### State
+
+- Last push confirmed: `b54f393` on `origin/feat/261101-phase-2-keyring`.
+- Phase 1.9 is still `[~]`. This session only prepares the runtime so a
+  later session can drop in model weights. Fixtures still do not count.
+
+### What was built
+
+- `.loka/review.yaml`: offline, `ollama` / `qwen2.5-coder:7b` at
+  `http://127.0.0.1:11434`.
+- `make local-model-install` / `start` / `status` / `pull`. Only `pull`
+  downloads weights; the others must not.
+- Gitignore for `*.gguf` and `.loka/models/`.
+- `docs/PHASE_1_9_RETURN.md` updated with the prepared path.
+
+### Next session
+
+1. `make local-model-pull` when weights can be added, then `make dogfood`.
+2. Tick 1.9 only after `analyzers_run` contains `llm:<model>`.
+3. Do not start Phase 3 unless asked.
+
 ## Session 15 - 2026-11-02: Finish Phase 2 coding
 
 ### State
