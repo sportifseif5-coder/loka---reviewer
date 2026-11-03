@@ -11,6 +11,7 @@ import (
 
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/model"
+	"github.com/sportifseif5-coder/loka---reviewer/internal/sandbox"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/vcs"
 )
 
@@ -97,6 +98,7 @@ func (a *WebAgent) Run(ctx context.Context, req WebRequest) (WebResult, error) {
 	if req.Mode != config.ModeAgent {
 		return WebResult{}, nil
 	}
+	guard := sandbox.NewGuard(sandbox.ForMode(string(req.Mode)))
 	var out WebResult
 	seen := map[string]bool{}
 	for _, cf := range req.Changed {
@@ -106,6 +108,9 @@ func (a *WebAgent) Run(ctx context.Context, req WebRequest) (WebResult, error) {
 					continue
 				}
 				target := wikiSearch + url.QueryEscape(sk.query)
+				if err := guard.Check(ctx, sandbox.Op{Kind: sandbox.KindFetch, URL: target}); err != nil {
+					continue
+				}
 				if !seen[target] {
 					if _, err := a.fetch.Fetch(ctx, target); err != nil {
 						out.Egress = append(out.Egress, target)

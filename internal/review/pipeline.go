@@ -3,6 +3,7 @@ package review
 import (
 	"fmt"
 
+	"github.com/sportifseif5-coder/loka---reviewer/internal/advisory"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/analyzer"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/config"
 	"github.com/sportifseif5-coder/loka---reviewer/internal/provider"
@@ -19,10 +20,10 @@ type Pipeline struct {
 	Warnings []string
 }
 
-// NewPipeline builds the default offline MVP pipeline: git VCS, secret
-// detection, go vet, default + included rules, and the configured provider
-// router. Provider misconfiguration degrades to the deterministic baseline
-// instead of aborting (ADR-0003).
+// NewPipeline builds the default pipeline: git VCS, secret detection, go vet,
+// language lints, the local advisory DB, default + included rules, and the
+// configured provider router. Provider misconfiguration degrades to the
+// deterministic baseline instead of aborting (ADR-0003).
 func NewPipeline(cfg *config.Config, s *store.Store, repoPath string) *Pipeline {
 	eng := NewEngine(cfg, s)
 	eng.RegisterVCS(vcs.NewGit())
@@ -30,6 +31,7 @@ func NewPipeline(cfg *config.Config, s *store.Store, repoPath string) *Pipeline 
 	eng.RegisterAnalyzer(analyzer.GoVetBridge{})
 	eng.RegisterAnalyzer(analyzer.PythonLint{})
 	eng.RegisterAnalyzer(analyzer.TypeScriptLint{})
+	eng.RegisterAnalyzer(advisory.Scanner{DB: advisory.Bundled()})
 
 	rs, warnings := rules.Load(repoPath, cfg.Rules.Include)
 	eng.RegisterRules(rs)

@@ -5,6 +5,31 @@
 > the summary. This is a narrative log only: status checkboxes live solely in
 > `docs/PROGRESS.md`.
 
+## Session 17 - 2026-11-02: Phase 3 hardening
+
+### State
+
+- Work is on `feat/261102-phase-3-hardening` (branched from
+  `feat/261101-phase-2-keyring` at `77a5e50`).
+- Phase 1.9 is still parked. Phase 3 coding is done; v1 is not closed.
+
+### What was built
+
+- Precision gate: `internal/precision` corpus (clean Go, secret, advisory,
+  Python, TS, lockfile noise) with zero false-positive budget.
+- Advisory DB: bundled scanner + local-file `advisory-update` (no URL).
+- Emit-only GitHub/GitLab comments: `loka emit` dry-run default; no
+  merge/push/approve surface.
+- Sandbox: default-deny shell/dotfiles; fetch only in agent mode; web
+  agent consults the guard.
+- Portability: `loka export` / `loka import`. Packaging: `make package`
+  unsigned CLI archives + SHA256SUMS (signing deferred).
+
+### Next session
+
+1. Finish Phase 1.9 per `docs/PHASE_1_9_RETURN.md` when weights can load.
+2. Do not start post-v1 work unless asked.
+
 ## Session 16 - 2026-11-02: Prepare local-model environment (no weights)
 
 ### State

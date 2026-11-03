@@ -30,8 +30,8 @@ func TestNewPipelineWiresLLMRouter(t *testing.T) {
 	if pipe.Engine.vcs == nil {
 		t.Fatal("VCS adapter not registered")
 	}
-	if len(pipe.Engine.analyzers) < 4 {
-		t.Fatalf("analyzers = %d, want secret-detection, go-vet, python-lint, typescript-lint", len(pipe.Engine.analyzers))
+	if len(pipe.Engine.analyzers) < 5 {
+		t.Fatalf("analyzers = %d, want secret-detection, go-vet, python-lint, typescript-lint, advisory", len(pipe.Engine.analyzers))
 	}
 	if len(pipe.Engine.rules) == 0 {
 		t.Fatal("default rules not registered")

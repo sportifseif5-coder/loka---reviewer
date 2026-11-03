@@ -25,6 +25,16 @@ func main() {
 	switch os.Args[1] {
 	case "review":
 		runReview(os.Args[2:])
+	case "emit":
+		runEmit(os.Args[2:])
+	case "export":
+		runExport(os.Args[2:])
+	case "import":
+		runImport(os.Args[2:])
+	case "advisory-update":
+		runAdvisoryUpdate(os.Args[2:])
+	case "precision":
+		runPrecision(os.Args[2:])
 	case "version":
 		fmt.Println(version.String())
 	default:
@@ -38,6 +48,11 @@ func usage() {
 
 Usage:
   loka review [-repo PATH] [-config PATH] [-db PATH]
+  loka emit -review FILE.json -target URL [-dry-run]
+  loka export [-db PATH] -out DIR
+  loka import [-db PATH] -from DIR
+  loka advisory-update -from FILE -to FILE
+  loka precision [-corpus DIR]
   loka version
 `)
 }

@@ -10,7 +10,7 @@
 > log. `make status-source` enforces the split so status cannot drift into
 > prose copies elsewhere.
 
-**Last updated:** 2026-11-02 (Session 16)
+**Last updated:** 2026-11-02 (Session 17)
 
 ## Legend and update protocol
 
@@ -163,19 +163,30 @@ Phase 1 is not closed. 1.9's local-model half is still `[~]`. Return playbook:
       checks (`python-lint`, `typescript-lint`) registered in `NewPipeline`.
       Subprocess ruff/eslint is not required for the v1 bridge.
 
-## Phase 3 - Hardening and Extension - NOT STARTED
+## Phase 3 - Hardening and Extension - COMPLETE
 
-Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` full v1 scope passes all invariants and the quality bar;
-`[ ]` emitters are proven emit-only.
+Exit criteria (defined in `docs/ROADMAP.md`): `[~]` full v1 scope passes all invariants and the quality bar
+(Phase 3 coding done; Phase 1.9 local-model dogfood still `[~]`, so v1 is not closed);
+`[x]` emitters are proven emit-only (`internal/emit` has no merge/push/approve; dry-run is the CLI default).
 
-- [ ] Benchmarks vs the noise budget on a fixed corpus; precision release
-      gate.
-- [ ] Advisory DB update flow (user-initiated, no code egress).
-- [ ] Git-platform emitter (emit-only PR comments) for GitHub/GitLab; no
-      merge capability.
-- [ ] Sandbox tightening: capability-scoped agent tool execution.
-- [ ] Packaging: signed installers for macOS, Windows, Linux; data
-      portability export/import.
+- [x] Benchmarks vs the noise budget on a fixed corpus; precision release
+      gate. `internal/precision` + `make precision` / `loka precision`.
+      v1 gate is zero false positives on `internal/precision/testdata/corpus`.
+- [x] Advisory DB update flow (user-initiated, no code egress). Bundled DB
+      in `internal/advisory`; `loka advisory-update -from FILE -to FILE`
+      rejects `http(s):` sources. Scanner registered in `NewPipeline`.
+- [x] Git-platform emitter (emit-only PR comments) for GitHub/GitLab; no
+      merge capability. `loka emit -review FILE -target URL` defaults to
+      dry-run. `TestEmitterHasNoMergeSurface` locks I7.
+- [x] Sandbox tightening: capability-scoped agent tool execution.
+      `internal/sandbox` default-denies shell, writes, and dotfiles.
+      Fetch requires `cap.fetch` (agent mode only). Web agent checks the
+      guard before opening a fetcher.
+- [~] Packaging: signed installers for macOS, Windows, Linux; data
+      portability export/import. (2026-11-02) `loka export` / `loka import`
+      round-trip reviews and feedback as 0600 JSON. `make package` cross-
+      compiles the CLI with SHA256SUMS. Apple/Microsoft code signing and
+      Wails installers stay a release-host step.
 
 ## Post-v1 (explicitly not committed)
 
@@ -185,11 +196,11 @@ Exit criteria (defined in `docs/ROADMAP.md`): `[ ]` full v1 scope passes all inv
 
 ## Next action
 
-**Must return to Phase 1.9** before calling Phase 1 complete. Runtime is
-prepared (install/start/status); weights are not. When adding the model:
+**Must return to Phase 1.9** before calling Phase 1 or v1 complete. Runtime
+is prepared; weights are not. When adding the model:
 `make local-model-start && make local-model-pull && make local-model-status && make dogfood`.
 Prove `analyzers_run` contains `llm:<model>`, then tick the 1.9 local-model
 line. Playbook: `docs/PHASE_1_9_RETURN.md`.
 
-Phase 2 coding is complete. Do not start Phase 3 until the user asks.
+Phase 3 coding is complete. Do not start post-v1 work unless asked.
 Narrative: `docs/SESSION_NOTES.md`.

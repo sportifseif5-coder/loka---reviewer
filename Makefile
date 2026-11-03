@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt lint status-source progress-hint golden update-golden offline ci desktop dogfood local-model-install local-model-start local-model-status local-model-pull
+.PHONY: build test vet fmt lint status-source progress-hint golden update-golden offline ci desktop dogfood local-model-install local-model-start local-model-status local-model-pull precision package
 
 build:
 	go build ./...
@@ -51,4 +51,10 @@ local-model-status:
 local-model-pull:
 	./scripts/local-model-pull.sh
 
-ci: lint test offline build desktop progress-hint
+precision:
+	go test ./internal/precision ./internal/advisory ./internal/emit ./internal/sandbox ./internal/portable -count=1
+
+package:
+	./scripts/package.sh
+
+ci: lint test offline build desktop precision progress-hint

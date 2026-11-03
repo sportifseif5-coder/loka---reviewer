@@ -119,6 +119,9 @@
 **/*.gguf.sha256
 .loka/models/
 
+# Cross-compiled CLI archives (make package)
+/dist/
+
 # Temporary files
 *.tmp
 *.temp
